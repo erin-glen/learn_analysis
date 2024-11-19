@@ -5,8 +5,8 @@ from datetime import datetime
 import arcpy
 import pandas as pd
 from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
-from analysis_core import perform_analysis, summarize_ghg
-from funcs import save_results
+from analysis_core import perform_analysis
+from funcs import save_results, summarize_ghg
 
 def main():
     # User inputs

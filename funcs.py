@@ -930,3 +930,37 @@ def write_dataframes_to_csv(
             df.to_csv(file, index=False)
             if i < len(df_list) - 1:
                 file.write("\n" * space)
+
+def save_results(
+    landuse_result: pd.DataFrame,
+    forest_type_result: pd.DataFrame,
+    output_path: str,
+    datetime_module,
+    start_time: datetime,
+    geography_id: str = None
+) -> None:
+    """
+    Save the land use and forest type results to CSV files.
+
+    Args:
+        landuse_result (pd.DataFrame): DataFrame containing land use results.
+        forest_type_result (pd.DataFrame): DataFrame containing forest type results.
+        output_path (str): Path to the output directory.
+        datetime_module: Reference to the datetime module.
+        start_time (datetime): Start time of the analysis.
+        geography_id (str, optional): Identifier for the geography (if applicable).
+    """
+    timestamp = datetime_module.now().strftime("%Y%m%d_%H%M%S")
+    geography_suffix = f"_{geography_id}" if geography_id else ""
+
+    # Save DataFrames to CSV files
+    landuse_csv = os.path.join(output_path, f"landuse_result{geography_suffix}_{timestamp}.csv")
+    forest_type_csv = os.path.join(output_path, f"forest_type_result{geography_suffix}_{timestamp}.csv")
+
+    landuse_result.to_csv(landuse_csv, index=False)
+    forest_type_result.to_csv(forest_type_csv, index=False)
+
+    # Optionally, log the processing time
+    processing_time = datetime_module.now() - start_time
+    with open(os.path.join(output_path, f"processing_time{geography_suffix}.txt"), "w") as f:
+        f.write(f"Total processing time: {processing_time}\n")

@@ -4,9 +4,14 @@ import os
 from datetime import datetime
 import arcpy
 from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
-from analysis_core import perform_analysis, summarize_ghg, summarize_tree_canopy, create_land_cover_transition_matrix
-from funcs import save_results, write_dataframes_to_csv
-
+from analysis_core import perform_analysis
+from funcs import (
+    save_results,
+    write_dataframes_to_csv,
+    summarize_ghg,
+    summarize_tree_canopy,
+    create_land_cover_transition_matrix,
+)
 
 def main():
     # User inputs
@@ -40,7 +45,7 @@ def main():
 
     # Perform analysis
     landuse_result, forest_type_result = perform_analysis(
-        input_config, CELL_SIZE, int(year1), int(year2), analysis_type='community'
+        input_config, CELL_SIZE, int(year1), int(year2), analysis_type='community', tree_canopy_source=tree_canopy_source
     )
 
     if landuse_result is None or forest_type_result is None:
@@ -61,4 +66,7 @@ def main():
     csv_file_path = os.path.join(output_path, "summary.csv")
     write_dataframes_to_csv(df_list, csv_file_path, space=5)
 
+    arcpy.AddMessage(f"Total processing time: {datetime.now() - start_time}")
 
+if __name__ == "__main__":
+    main()
