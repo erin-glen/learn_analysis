@@ -24,10 +24,10 @@ from arcpy.sa import (
     InList,
 )
 from lookups import (
-    nlcd_parent_rollup_categories,
-    nlcd_categories,
-    disturbance_lookup,
-    carbon_stock_loss,
+    nlcdParentRollupCategories,
+    nlcdCategories,
+    disturbanceLookup,
+    carbonStockLoss,
 )
 
 # Ensure overwriting of outputs

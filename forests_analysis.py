@@ -15,7 +15,13 @@ from datetime import datetime
 import arcpy
 import pandas as pd
 from arcpy.sa import Con, Raster
-from lookups import nlcd_parent_rollup_categories
+from lookups import (
+    nlcdParentRollupCategories,
+    nlcdCategories,
+    disturbanceLookup,
+    carbonStockLoss,
+)
+
 from funcs import (
     tabulate_area_by_stratification,
     determine_landuse_category,
