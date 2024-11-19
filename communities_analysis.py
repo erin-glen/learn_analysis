@@ -1,7 +1,7 @@
 # communities_analysis.py
 
 import os
-from datetime import datetime
+from datetime import datetime as dt
 import arcpy
 from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
@@ -31,7 +31,7 @@ def main():
     input_config["year1"] = int(year1)
     input_config["year2"] = int(year2)
 
-    start_time = datetime.now()
+    start_time = dt.now()
 
     # Output directory
     date_str = start_time.strftime("%Y_%m_%d")
@@ -45,7 +45,12 @@ def main():
 
     # Perform analysis
     landuse_result, forest_type_result = perform_analysis(
-        input_config, CELL_SIZE, int(year1), int(year2), analysis_type='community', tree_canopy_source=tree_canopy_source
+        input_config,
+        CELL_SIZE,
+        int(year1),
+        int(year2),
+        analysis_type='community',
+        tree_canopy_source=tree_canopy_source
     )
 
     if landuse_result is None or forest_type_result is None:
@@ -53,7 +58,7 @@ def main():
         return
 
     # Save results
-    save_results(landuse_result, forest_type_result, output_path, datetime, start_time)
+    save_results(landuse_result, forest_type_result, output_path, start_time)
 
     # Summarize results
     years_difference = int(year2) - int(year1)
@@ -66,7 +71,7 @@ def main():
     csv_file_path = os.path.join(output_path, "summary.csv")
     write_dataframes_to_csv(df_list, csv_file_path, space=5)
 
-    arcpy.AddMessage(f"Total processing time: {datetime.now() - start_time}")
+    arcpy.AddMessage(f"Total processing time: {dt.now() - start_time}")
 
 if __name__ == "__main__":
     main()

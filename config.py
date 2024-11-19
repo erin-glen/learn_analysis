@@ -3,8 +3,8 @@
 import os
 
 # Base directories
-DATA_FOLDER = r"U:\eglen\Projects\LEARN Tools\Data\SourceData\Data\Rasters"
-OUTPUT_BASE_DIR = r"U:\eglen\Projects\LEARN Tools\Data\Outputs"
+DATA_FOLDER = r"C:\GIS\Data\LEARN\SourceData"
+OUTPUT_BASE_DIR = r"C:\GIS\Data\LEARN\Outputs"
 
 # Valid years for analysis
 VALID_YEARS = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019", "2021"]

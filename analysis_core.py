@@ -51,6 +51,8 @@ def perform_analysis(
         tuple: DataFrames for land use results and forest type results.
     """
     try:
+        from datetime import datetime as dt
+
         # Unpack inputs
         aoi = input_config["aoi"]
         nlcd_1 = input_config["nlcd_1"]
@@ -68,11 +70,19 @@ def perform_analysis(
         # Save original environment settings
         original_extent = arcpy.env.extent
 
+        # Get spatial reference of NLCD raster
+        nlcd_sr = arcpy.Describe(nlcd_1).spatialReference
+
+        # Project AOI to match NLCD raster spatial reference
+        arcpy.AddMessage("Projecting AOI to match NLCD raster spatial reference.")
+        projected_aoi = arcpy.management.Project(aoi, "in_memory\\projected_aoi", nlcd_sr)
+        aoi = projected_aoi  # Update AOI to use the projected version
+
         # Set environment settings
         arcpy.env.snapRaster = nlcd_1
         arcpy.env.cellSize = cell_size
         arcpy.env.overwriteOutput = True
-        arcpy.env.extent = aoi
+        arcpy.env.extent = arcpy.Describe(aoi).extent  # Corrected line
 
         # Step 1: Create stratification raster
         arcpy.AddMessage("STEP 1: Creating land use stratification raster for all classes of land use")
@@ -81,7 +91,9 @@ def perform_analysis(
         # Step 2: Calculate tree canopy averages and losses (if applicable)
         if analysis_type == 'community' and tree_canopy_1 and tree_canopy_2:
             arcpy.AddMessage("STEP 2: Summing up the tree canopy average & difference by stratification class")
-            tree_cover = calculate_tree_canopy(tree_canopy_1, tree_canopy_2, strat_raster, tree_canopy_source, aoi, cell_size)
+            tree_cover = calculate_tree_canopy(
+                tree_canopy_1, tree_canopy_2, strat_raster, tree_canopy_source, aoi, cell_size
+            )
 
             # Step 2.5: Calculate plantable areas (if applicable)
             if plantable_areas and plantable_areas.lower() != "none":
@@ -151,4 +163,7 @@ def perform_analysis(
 
     finally:
         # Restore environment settings
-        arcpy.env.extent = original_extent
+        if original_extent:
+            arcpy.env.extent = original_extent
+        else:
+            arcpy.env.extent = None

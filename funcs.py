@@ -11,7 +11,7 @@ Date: [Current Date]
 """
 
 import os
-from datetime import datetime
+from datetime import datetime as dt
 import arcpy
 import pandas as pd
 import numpy as np
@@ -22,10 +22,11 @@ from arcpy.sa import (
     Raster,
     CellStatistics,
     InList,
+    ExtractByMask,
 )
 from lookups import (
-    nlcdParentRollupCategories,
     nlcdCategories,
+    nlcdParentRollupCategories,
     disturbanceLookup,
     carbonStockLoss,
 )
@@ -106,8 +107,8 @@ def rollup_to_parent_class(
     df_copy = df.copy()
 
     # Map NLCD classes to parent classes
-    df_copy["NLCD1_parentclass"] = df_copy["NLCD1_class"].map(nlcd_parent_rollup_categories)
-    df_copy["NLCD2_parentclass"] = df_copy["NLCD2_class"].map(nlcd_parent_rollup_categories)
+    df_copy["NLCD1_parentclass"] = df_copy["NLCD1_class"].map(nlcdParentRollupCategories)
+    df_copy["NLCD2_parentclass"] = df_copy["NLCD2_class"].map(nlcdParentRollupCategories)
 
     group_columns = ["NLCD1_parentclass", "NLCD2_parentclass"]
     if group_by is not None:
@@ -137,7 +138,6 @@ def pivot_dataframe(
         df, values=values, index=[index_category], columns=[column_category], aggfunc=np.sum
     )
     return pivot_df
-
 
 def tabulate_area_by_stratification(
     stratification_raster: Raster,
@@ -185,18 +185,18 @@ def tabulate_area_by_stratification(
     df_melted["NLCD2_value"] = df_melted["VALUE"] % 100
 
     # Map NLCD values to categories
-    df_melted["NLCD1_class"] = df_melted["NLCD1_value"].map(nlcd_categories)
-    df_melted["NLCD2_class"] = df_melted["NLCD2_value"].map(nlcd_categories)
+    df_melted["NLCD1_class"] = df_melted["NLCD1_value"].map(nlcdCategories)
+    df_melted["NLCD2_class"] = df_melted["NLCD2_value"].map(nlcdCategories)
 
-    # Filter out rows with zero area
-    df_filtered = df_melted[df_melted["Area"] > 0]
+    # Filter out rows with zero area and create a copy
+    df_filtered = df_melted[df_melted["Area"] > 0].copy()
 
     # Calculate area in hectares
     df_filtered[area_column_name] = df_filtered["Area"] / 10000  # 1 hectare = 10,000 m²
 
     # Rename columns for clarity
-    df_filtered.rename(
-        columns={"Raster_VALUE": output_name, "VALUE": "StratificationValue"}, inplace=True
+    df_filtered = df_filtered.rename(
+        columns={"Raster_VALUE": output_name, "VALUE": "StratificationValue"}
     )
 
     # Clean up in-memory workspace
@@ -243,8 +243,8 @@ def zonal_sum_by_stratification(
     # Unpack NLCD codes
     zs_df["NLCD1_value"] = zs_df["StratificationValue"] // 100
     zs_df["NLCD2_value"] = zs_df["StratificationValue"] % 100
-    zs_df["NLCD1_class"] = zs_df["NLCD1_value"].map(nlcd_categories)
-    zs_df["NLCD2_class"] = zs_df["NLCD2_value"].map(nlcd_categories)
+    zs_df["NLCD1_class"] = zs_df["NLCD1_value"].map(nlcdCategories)
+    zs_df["NLCD2_class"] = zs_df["NLCD2_value"].map(nlcdCategories)
 
     # Calculate area in hectares
     zs_df["Hectares"] = (zs_df["CellCount"] * cell_size ** 2) / 10000
@@ -261,7 +261,7 @@ def calculate_tree_canopy(
     tree_canopy_1: str,
     tree_canopy_2: str,
     strat_raster: Raster,
-    tree_canopy: str,
+    tree_canopy_source: str,
     aoi: str,
     cell_size: int,
 ) -> pd.DataFrame:
@@ -272,7 +272,7 @@ def calculate_tree_canopy(
         tree_canopy_1 (str): Path to tree canopy raster for the first year.
         tree_canopy_2 (str): Path to tree canopy raster for the second year.
         strat_raster (Raster): Stratification raster.
-        tree_canopy (str): Identifier for the tree canopy data source.
+        tree_canopy_source (str): Identifier for the tree canopy data source.
         aoi (str): Path to the Area of Interest polygon feature.
         cell_size (int): Cell size in meters.
 
@@ -291,21 +291,24 @@ def calculate_tree_canopy(
             ]
         )
 
-    # Set environment settings
-    with arcpy.EnvManager(mask=aoi, cellSize=cell_size):
-        # Calculate average tree canopy
-        tree_canopy_avg = (Raster(tree_canopy_1) + Raster(tree_canopy_2)) / 2
+    # Calculate average tree canopy
+    tree_canopy_avg = (Raster(tree_canopy_1) + Raster(tree_canopy_2)) / 2
 
-        # Calculate tree canopy loss
-        tree_canopy_diff = Con(
-            Raster(tree_canopy_2) < Raster(tree_canopy_1),
-            Raster(tree_canopy_1) - Raster(tree_canopy_2),
-            0,
-        )
+    # Calculate tree canopy loss
+    tree_canopy_diff = Con(
+        Raster(tree_canopy_2) < Raster(tree_canopy_1),
+        Raster(tree_canopy_1) - Raster(tree_canopy_2),
+        0,
+    )
+
+    # Apply AOI mask using ExtractByMask
+    arcpy.AddMessage("Applying AOI mask using ExtractByMask.")
+    tree_canopy_avg_masked = ExtractByMask(tree_canopy_avg, aoi)
+    tree_canopy_diff_masked = ExtractByMask(tree_canopy_diff, aoi)
 
     # Zonal sum for average and loss
-    tc_avg_df = zonal_sum_by_stratification(strat_raster, tree_canopy_avg, "TreeCanopy_HA", cell_size)
-    tc_diff_df = zonal_sum_by_stratification(strat_raster, tree_canopy_diff, "TreeCanopyLoss_HA", cell_size)
+    tc_avg_df = zonal_sum_by_stratification(strat_raster, tree_canopy_avg_masked, "TreeCanopy_HA", cell_size)
+    tc_diff_df = zonal_sum_by_stratification(strat_raster, tree_canopy_diff_masked, "TreeCanopyLoss_HA", cell_size)
 
     # Merge dataframes
     tree_cover = tc_avg_df.merge(
@@ -315,10 +318,10 @@ def calculate_tree_canopy(
     )
 
     # Unit conversion based on data source
-    if "NLCD" in tree_canopy:
+    if "NLCD" in tree_canopy_source:
         # For NLCD data
         factor = 0.0001 * 900  # Conversion factor for NLCD
-    elif "CBW" in tree_canopy:
+    elif "CBW" in tree_canopy_source:
         # For CBW data
         factor = 0.0001
     else:
@@ -358,12 +361,12 @@ def calculate_plantable_areas(
         arcpy.AddMessage("Skipping Plantable Areas - no data provided.")
         return tree_cover_df
 
-    # Set environment settings
-    with arcpy.EnvManager(mask=aoi, cellSize=cell_size):
-        plantable_raster = Raster(plantable_areas_raster)
+    # Apply AOI mask using ExtractByMask
+    arcpy.AddMessage("Applying AOI mask to plantable areas raster.")
+    plantable_raster_masked = ExtractByMask(plantable_areas_raster, aoi)
 
     # Zonal sum for plantable areas
-    plantable_sum_df = zonal_sum_by_stratification(strat_raster, plantable_raster, "Plantable_HA", cell_size)
+    plantable_sum_df = zonal_sum_by_stratification(strat_raster, plantable_raster_masked, "Plantable_HA", cell_size)
 
     # Merge with tree cover DataFrame
     tree_cover_df = tree_cover_df.merge(
@@ -401,7 +404,7 @@ def compute_disturbance_max(
     )
 
     # Map disturbance codes to classes
-    disturbance_df["DisturbanceClass"] = disturbance_df["Disturbance"].map(disturbance_lookup)
+    disturbance_df["DisturbanceClass"] = disturbance_df["Disturbance"].map(disturbanceLookup)
 
     # Pivot the DataFrame to wide format
     disturbance_wide = disturbance_df.pivot_table(
@@ -481,9 +484,9 @@ def calculate_forest_to_nonforest_emissions(row: pd.Series) -> float:
     ]
     if row["Category"] in categories:
         end_class = row["NLCD_2_ParentClass"]
-        ag_bg = row["carbon_ag_bg_us"] * carbon_stock_loss[end_class]["biomass"]
-        sd_dd = row["carbon_sd_dd_lt"] * carbon_stock_loss[end_class]["dead organic matter"]
-        so = row["carbon_so"] * carbon_stock_loss[end_class]["soil organic"]
+        ag_bg = row["carbon_ag_bg_us"] * carbonStockLoss[end_class]["biomass"]
+        sd_dd = row["carbon_sd_dd_lt"] * carbonStockLoss[end_class]["dead organic matter"]
+        so = row["carbon_so"] * carbonStockLoss[end_class]["soil organic"]
         result = (ag_bg + sd_dd + so) * 44 / 12  # Convert C to CO2
     else:
         result = 0.0
@@ -537,13 +540,13 @@ def calculate_disturbances(
         pd.DataFrame: Updated DataFrame with disturbance areas.
     """
     # Map NLCD classes to parent classes
-    forest_age_df["NLCD_1_ParentClass"] = forest_age_df["NLCD1_class"].map(nlcd_parent_rollup_categories)
-    forest_age_df["NLCD_2_ParentClass"] = forest_age_df["NLCD2_class"].map(nlcd_parent_rollup_categories)
+    forest_age_df["NLCD_1_ParentClass"] = forest_age_df["NLCD1_class"].map(nlcdParentRollupCategories)
+    forest_age_df["NLCD_2_ParentClass"] = forest_age_df["NLCD2_class"].map(nlcdParentRollupCategories)
 
-    disturbance_categories = set(disturbance_lookup.values())
+    disturbance_categories = set(disturbanceLookup.values())
 
     for disturbance in disturbance_categories:
-        pixel_values = [k for k, v in disturbance_lookup.items() if v == disturbance]
+        pixel_values = [k for k, v in disturbanceLookup.items() if v == disturbance]
 
         # Use conditional raster to isolate disturbance pixels
         disturbance_condition = Con(
@@ -821,7 +824,7 @@ def calculate_ghg_flux(
 
     Args:
         category (str): Main category.
-        type_ (str): Specific type within the category.
+        type_: str): Specific type within the category.
         landuse_df (pd.DataFrame): Land use DataFrame.
         forest_type_df (pd.DataFrame): Forest type DataFrame.
         years (int): Number of years between observations.
@@ -931,12 +934,12 @@ def write_dataframes_to_csv(
             if i < len(df_list) - 1:
                 file.write("\n" * space)
 
+
 def save_results(
     landuse_result: pd.DataFrame,
     forest_type_result: pd.DataFrame,
     output_path: str,
-    datetime_module,
-    start_time: datetime,
+    start_time: dt,
     geography_id: str = None
 ) -> None:
     """
@@ -946,11 +949,10 @@ def save_results(
         landuse_result (pd.DataFrame): DataFrame containing land use results.
         forest_type_result (pd.DataFrame): DataFrame containing forest type results.
         output_path (str): Path to the output directory.
-        datetime_module: Reference to the datetime module.
         start_time (datetime): Start time of the analysis.
         geography_id (str, optional): Identifier for the geography (if applicable).
     """
-    timestamp = datetime_module.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
     geography_suffix = f"_{geography_id}" if geography_id else ""
 
     # Save DataFrames to CSV files
@@ -961,6 +963,6 @@ def save_results(
     forest_type_result.to_csv(forest_type_csv, index=False)
 
     # Optionally, log the processing time
-    processing_time = datetime_module.now() - start_time
+    processing_time = dt.now() - start_time
     with open(os.path.join(output_path, f"processing_time{geography_suffix}.txt"), "w") as f:
         f.write(f"Total processing time: {processing_time}\n")
