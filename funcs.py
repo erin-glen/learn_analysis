@@ -139,6 +139,7 @@ def pivot_dataframe(
     )
     return pivot_df
 
+
 def tabulate_area_by_stratification(
     stratification_raster: Raster,
     value_raster: str,
@@ -320,14 +321,14 @@ def calculate_tree_canopy(
     # Unit conversion based on data source
     if "NLCD" in tree_canopy_source:
         # For NLCD data
-        factor = 0.01 * 900 * 0.0001 # Conversion factor for NLCD.
-        # convert to percentage (* 0.01) multiply by cell area (900m2) convert to ha (0.0001)
+        # Convert percentage to fraction, multiply by cell area (cell_size^2), convert to hectares
+        factor = 0.01 * (cell_size ** 2) / 10000
     elif "CBW" in tree_canopy_source:
         # For CBW data
-        factor = 0.0001
+        factor = (cell_size ** 2) / 10000
     else:
         # Default conversion factor
-        factor = 0.0001 * 900
+        factor = (cell_size ** 2) / 10000
 
     tree_cover["TreeCanopy_HA"] *= factor
     tree_cover["TreeCanopyLoss_HA"] *= factor
@@ -377,7 +378,8 @@ def calculate_plantable_areas(
     )
 
     # Convert to hectares
-    tree_cover_df["Plantable_HA"] *= 0.0001 * 900
+    factor = (cell_size ** 2) / 10000
+    tree_cover_df["Plantable_HA"] *= factor
 
     return tree_cover_df
 
@@ -429,6 +431,7 @@ def zonal_sum_carbon(
     carbon_ag_bg_us: str,
     carbon_sd_dd_lt: str,
     carbon_so: str,
+    cell_size: int = 30,
 ) -> pd.DataFrame:
     """
     Calculate the sum of carbon stocks by stratification class.
@@ -438,14 +441,15 @@ def zonal_sum_carbon(
         carbon_ag_bg_us (str): Path to above and below ground carbon raster.
         carbon_sd_dd_lt (str): Path to standing dead, down dead, and litter carbon raster.
         carbon_so (str): Path to soil organic carbon raster.
+        cell_size (int, optional): Cell size in meters. Defaults to 30.
 
     Returns:
         pd.DataFrame: DataFrame with summed carbon stocks.
     """
     # Calculate zonal sums for each carbon component
-    carbon_ag_bg_us_df = zonal_sum_by_stratification(strat_raster, carbon_ag_bg_us, "carbon_ag_bg_us")
-    carbon_sd_dd_lt_df = zonal_sum_by_stratification(strat_raster, carbon_sd_dd_lt, "carbon_sd_dd_lt")
-    carbon_so_df = zonal_sum_by_stratification(strat_raster, carbon_so, "carbon_so")
+    carbon_ag_bg_us_df = zonal_sum_by_stratification(strat_raster, carbon_ag_bg_us, "carbon_ag_bg_us", cell_size)
+    carbon_sd_dd_lt_df = zonal_sum_by_stratification(strat_raster, carbon_sd_dd_lt, "carbon_sd_dd_lt", cell_size)
+    carbon_so_df = zonal_sum_by_stratification(strat_raster, carbon_so, "carbon_so", cell_size)
 
     # Merge DataFrames
     carbon_df = carbon_ag_bg_us_df.merge(
@@ -459,9 +463,13 @@ def zonal_sum_carbon(
     )
 
     # Unit conversion to metric tons of carbon
-    carbon_df["carbon_ag_bg_us"] *= 900 / 10000
-    carbon_df["carbon_sd_dd_lt"] *= 900 / 10000
-    carbon_df["carbon_so"] *= 900 / 10000
+    # Pixels are in metric tons C per hectare
+    # Convert per hectare values to per pixel values
+    # (metric tons C per hectare) * (cell area in hectares) = metric tons C per pixel
+    cell_area_ha = (cell_size ** 2) / 10000  # Convert cell area from m² to hectares
+    carbon_df["carbon_ag_bg_us"] *= cell_area_ha
+    carbon_df["carbon_sd_dd_lt"] *= cell_area_ha
+    carbon_df["carbon_so"] *= cell_area_ha
 
     return carbon_df
 
@@ -810,6 +818,17 @@ def calculate_area(
         if column:
             area = forest_type_df.loc[forest_type_df["Category"] == "Forest Remaining Forest", column].sum()
             return int(area)
+    elif category == "Trees Outside Forest":
+        if type_ == "Tree canopy loss":
+            area = landuse_df.loc[
+                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopyLoss_HA"
+            ].sum()
+            return int(area)
+        elif type_ == "Canopy maintained/gained":
+            area = landuse_df.loc[
+                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopy_HA"
+            ].sum()
+            return int(area)
     return 0
 
 
@@ -869,6 +888,9 @@ def calculate_ghg_flux(
                 forest_type_df["Category"] == "Forest Remaining Forest", column
             ].sum()
             return int(ghg)
+    elif category == "Trees Outside Forest":
+        # Set GHG flux to zero as emission factors may not be available
+        return 0
     return 0
 
 
@@ -897,6 +919,9 @@ def summarize_ghg(
         ("Forest Remaining Forest", "Fire", "Emissions"),
         ("Forest Remaining Forest", "Insect/Disease", "Emissions"),
         ("Forest Remaining Forest", "Harvest/Other", "Emissions"),
+        # Include Trees Outside Forest categories
+        ("Trees Outside Forest", "Tree canopy loss", "Emissions"),
+        ("Trees Outside Forest", "Canopy maintained/gained", "Removals"),
     ]
 
     results = []
