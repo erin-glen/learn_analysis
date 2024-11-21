@@ -82,7 +82,7 @@ def perform_analysis(
         arcpy.env.snapRaster = nlcd_1
         arcpy.env.cellSize = cell_size
         arcpy.env.overwriteOutput = True
-        arcpy.env.extent = arcpy.Describe(aoi).extent  # Corrected line
+        arcpy.env.extent = arcpy.Describe(aoi).extent
 
         # Step 1: Create stratification raster
         arcpy.AddMessage("STEP 1: Creating land use stratification raster for all classes of land use")

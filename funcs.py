@@ -819,19 +819,20 @@ def calculate_area(
             area = forest_type_df.loc[forest_type_df["Category"] == "Forest Remaining Forest", column].sum()
             return int(area)
     elif category == "Trees Outside Forest":
-        if type_ == "Tree canopy loss":
+        if type_ == "Tree canopy loss" and "TreeCanopyLoss_HA" in landuse_df.columns:
             area = landuse_df.loc[
                 landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopyLoss_HA"
             ].sum()
             return int(area)
-        elif type_ == "Canopy maintained/gained":
+        elif type_ == "Canopy maintained/gained" and "TreeCanopy_HA" in landuse_df.columns:
             area = landuse_df.loc[
                 landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopy_HA"
             ].sum()
             return int(area)
+        else:
+            return 0
     return 0
 
-# Import statements and other functions remain the same
 
 def calculate_ghg_flux(
     category: str,
@@ -848,7 +849,7 @@ def calculate_ghg_flux(
 
     Args:
         category (str): Main category.
-        type_ (str): Specific type within the category.
+        type_: str): Specific type within the category.
         landuse_df (pd.DataFrame): Land use DataFrame.
         forest_type_df (pd.DataFrame): Forest type DataFrame.
         years (int): Number of years between observations.
@@ -896,8 +897,7 @@ def calculate_ghg_flux(
             ].sum()
             return int(ghg)
     elif category == "Trees Outside Forest":
-        if type_ == "Tree canopy loss":
-            # Ensure that emissions_factor is provided
+        if type_ == "Tree canopy loss" and "TreeCanopyLoss_HA" in landuse_df.columns:
             if emissions_factor is None:
                 raise ValueError("Emissions factor is required for tree canopy loss emissions calculation.")
             area = landuse_df.loc[
@@ -905,8 +905,7 @@ def calculate_ghg_flux(
             ].sum()
             ghg = (area * emissions_factor * c_to_co2) / years
             return int(ghg)
-        elif type_ == "Canopy maintained/gained":
-            # Ensure that removals_factor is provided
+        elif type_ == "Canopy maintained/gained" and "TreeCanopy_HA" in landuse_df.columns:
             if removals_factor is None:
                 raise ValueError("Removals factor is required for canopy maintained/gained removals calculation.")
             area = landuse_df.loc[
@@ -914,6 +913,8 @@ def calculate_ghg_flux(
             ].sum()
             ghg = area * removals_factor * c_to_co2
             return int(ghg)
+        else:
+            return 0
     return 0
 
 def summarize_ghg(
@@ -923,6 +924,7 @@ def summarize_ghg(
     emissions_factor: float = None,
     removals_factor: float = None,
     c_to_co2: float = 44 / 12,
+    include_trees_outside_forest: bool = True,
 ) -> pd.DataFrame:
     """
     Summarize GHG emissions and removals.
@@ -934,6 +936,7 @@ def summarize_ghg(
         emissions_factor (float, optional): Emission factor for trees outside forests.
         removals_factor (float, optional): Removal factor for trees outside forests.
         c_to_co2 (float, optional): Conversion factor from carbon to CO2.
+        include_trees_outside_forest (bool, optional): Whether to include 'Trees Outside Forest' categories.
 
     Returns:
         pd.DataFrame: Summary DataFrame.
@@ -949,10 +952,13 @@ def summarize_ghg(
         ("Forest Remaining Forest", "Fire", "Emissions"),
         ("Forest Remaining Forest", "Insect/Disease", "Emissions"),
         ("Forest Remaining Forest", "Harvest/Other", "Emissions"),
-        # Include Trees Outside Forest categories
-        ("Trees Outside Forest", "Tree canopy loss", "Emissions"),
-        ("Trees Outside Forest", "Canopy maintained/gained", "Removals"),
     ]
+
+    if include_trees_outside_forest:
+        categories.extend([
+            ("Trees Outside Forest", "Tree canopy loss", "Emissions"),
+            ("Trees Outside Forest", "Canopy maintained/gained", "Removals"),
+        ])
 
     results = []
     for category, type_, emissions_removals in categories:
@@ -980,6 +986,7 @@ def summarize_ghg(
     summary_df = pd.DataFrame(results)
 
     return summary_df
+
 
 
 

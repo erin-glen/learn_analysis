@@ -8,7 +8,7 @@ from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
 from funcs import save_results, summarize_ghg
 
-def main():
+def main(mode=None):
     # User inputs
     year1 = input("Enter Year 1: ").strip()
     assert year1 in VALID_YEARS, f"{year1} is not a valid year."
@@ -52,7 +52,7 @@ def main():
 
     # Process each geography
     with arcpy.da.SearchCursor(aoi_shapefile, [id_field, "SHAPE@"]) as cursor:
-        for row in cursor:
+        for idx, row in enumerate(cursor):
             geography_id, geometry = row
             arcpy.AddMessage(f"Processing Geography ID: {geography_id}")
 
@@ -85,16 +85,31 @@ def main():
                     emissions_factor=emissions_factor,
                     removals_factor=removals_factor,
                     c_to_co2=c_to_co2,
+                    include_trees_outside_forest=False,  # Exclude Trees Outside Forest categories
                 )
                 ghg_result["Geography_ID"] = geography_id
 
                 all_results.append(ghg_result)
+
+                # Save individual results (optional)
+                save_results(
+                    landuse_result,
+                    forest_type_result,
+                    output_path,
+                    start_time,
+                    geography_id=geography_id
+                )
 
             except Exception as e:
                 arcpy.AddError(f"Error processing Geography ID {geography_id}: {e}")
 
             finally:
                 arcpy.management.Delete(aoi_temp)
+
+            # If in test mode, process only the first feature
+            if mode == 'test':
+                arcpy.AddMessage("Test mode enabled. Processed only the first feature.")
+                break
 
     # Combine and save results
     if all_results:
@@ -106,4 +121,6 @@ def main():
     arcpy.AddMessage(f"Total processing time: {dt.now() - start_time}")
 
 if __name__ == "__main__":
+    # To run in test mode, call main('test')
+    # To run normally, call main()
     main()
