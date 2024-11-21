@@ -1,5 +1,3 @@
-# communities_analysis.py
-
 import os
 from datetime import datetime as dt
 import arcpy
@@ -34,7 +32,7 @@ def main():
     start_time = dt.now()
 
     # Output directory
-    date_str = start_time.strftime("%Y_%m_%d")
+    date_str = start_time.strftime("%Y_%m_%d_%H_%M")  # Updated to include hour and minute
     output_folder_name = f"{date_str}_{year1}_{year2}_{aoi_name}"
     output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
