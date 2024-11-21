@@ -320,7 +320,8 @@ def calculate_tree_canopy(
     # Unit conversion based on data source
     if "NLCD" in tree_canopy_source:
         # For NLCD data
-        factor = 0.0001 * 900  # Conversion factor for NLCD
+        factor = 0.01 * 900 * 0.0001 # Conversion factor for NLCD.
+        # convert to percentage (* 0.01) multiply by cell area (900m2) convert to ha (0.0001)
     elif "CBW" in tree_canopy_source:
         # For CBW data
         factor = 0.0001
