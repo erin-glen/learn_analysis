@@ -29,10 +29,19 @@ def main():
     input_config["year1"] = int(year1)
     input_config["year2"] = int(year2)
 
+    # Retrieve emissions_factor and removals_factor from input_config
+    emissions_factor = input_config.get("emissions_factor", None)
+    removals_factor = input_config.get("removals_factor", None)
+    c_to_co2 = input_config.get("c_to_co2", 44 / 12)  # Default value if not provided
+
+    # Ensure that emissions_factor and removals_factor are provided
+    if emissions_factor is None or removals_factor is None:
+        raise ValueError("Emissions factor and removals factor must be provided in the configuration.")
+
     start_time = dt.now()
 
     # Output directory
-    date_str = start_time.strftime("%Y_%m_%d_%H_%M")  # Updated to include hour and minute
+    date_str = start_time.strftime("%Y_%m_%d_%H_%M")  # Include hour and minute
     output_folder_name = f"{date_str}_{year1}_{year2}_{aoi_name}"
     output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
@@ -62,7 +71,16 @@ def main():
     years_difference = int(year2) - int(year1)
     tc_summary = summarize_tree_canopy(landuse_result)
     transition_matrix = create_land_cover_transition_matrix(landuse_result)
-    ghg_result = summarize_ghg(landuse_result, forest_type_result, years_difference)
+
+    # Pass new parameters to summarize_ghg
+    ghg_result = summarize_ghg(
+        landuse_df=landuse_result,
+        forest_type_df=forest_type_result,
+        years=years_difference,
+        emissions_factor=emissions_factor,
+        removals_factor=removals_factor,
+        c_to_co2=c_to_co2,
+    )
 
     # Save summaries
     df_list = [transition_matrix, tc_summary, ghg_result]

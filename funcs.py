@@ -831,6 +831,7 @@ def calculate_area(
             return int(area)
     return 0
 
+# Import statements and other functions remain the same
 
 def calculate_ghg_flux(
     category: str,
@@ -838,16 +839,22 @@ def calculate_ghg_flux(
     landuse_df: pd.DataFrame,
     forest_type_df: pd.DataFrame,
     years: int,
+    emissions_factor: float = None,
+    removals_factor: float = None,
+    c_to_co2: float = 44 / 12,
 ) -> int:
     """
     Calculate GHG flux for a specific category and type.
 
     Args:
         category (str): Main category.
-        type_: str): Specific type within the category.
+        type_ (str): Specific type within the category.
         landuse_df (pd.DataFrame): Land use DataFrame.
         forest_type_df (pd.DataFrame): Forest type DataFrame.
         years (int): Number of years between observations.
+        emissions_factor (float, optional): Emission factor for trees outside forests.
+        removals_factor (float, optional): Removal factor for trees outside forests.
+        c_to_co2 (float, optional): Conversion factor from carbon to CO2.
 
     Returns:
         int: GHG flux in metric tons of CO2e per year.
@@ -889,13 +896,33 @@ def calculate_ghg_flux(
             ].sum()
             return int(ghg)
     elif category == "Trees Outside Forest":
-        # Set GHG flux to zero as emission factors may not be available
-        return 0
+        if type_ == "Tree canopy loss":
+            # Ensure that emissions_factor is provided
+            if emissions_factor is None:
+                raise ValueError("Emissions factor is required for tree canopy loss emissions calculation.")
+            area = landuse_df.loc[
+                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopyLoss_HA"
+            ].sum()
+            ghg = (area * emissions_factor * c_to_co2) / years
+            return int(ghg)
+        elif type_ == "Canopy maintained/gained":
+            # Ensure that removals_factor is provided
+            if removals_factor is None:
+                raise ValueError("Removals factor is required for canopy maintained/gained removals calculation.")
+            area = landuse_df.loc[
+                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopy_HA"
+            ].sum()
+            ghg = area * removals_factor * c_to_co2
+            return int(ghg)
     return 0
 
-
 def summarize_ghg(
-    landuse_df: pd.DataFrame, forest_type_df: pd.DataFrame, years: int
+    landuse_df: pd.DataFrame,
+    forest_type_df: pd.DataFrame,
+    years: int,
+    emissions_factor: float = None,
+    removals_factor: float = None,
+    c_to_co2: float = 44 / 12,
 ) -> pd.DataFrame:
     """
     Summarize GHG emissions and removals.
@@ -904,6 +931,9 @@ def summarize_ghg(
         landuse_df (pd.DataFrame): Land use DataFrame.
         forest_type_df (pd.DataFrame): Forest type DataFrame.
         years (int): Number of years between observations.
+        emissions_factor (float, optional): Emission factor for trees outside forests.
+        removals_factor (float, optional): Removal factor for trees outside forests.
+        c_to_co2 (float, optional): Conversion factor from carbon to CO2.
 
     Returns:
         pd.DataFrame: Summary DataFrame.
@@ -927,7 +957,16 @@ def summarize_ghg(
     results = []
     for category, type_, emissions_removals in categories:
         area = calculate_area(category, type_, landuse_df, forest_type_df)
-        ghg_flux = calculate_ghg_flux(category, type_, landuse_df, forest_type_df, years)
+        ghg_flux = calculate_ghg_flux(
+            category,
+            type_,
+            landuse_df,
+            forest_type_df,
+            years,
+            emissions_factor=emissions_factor,
+            removals_factor=removals_factor,
+            c_to_co2=c_to_co2,
+        )
         results.append(
             {
                 "Category": category,
@@ -941,6 +980,7 @@ def summarize_ghg(
     summary_df = pd.DataFrame(results)
 
     return summary_df
+
 
 
 def write_dataframes_to_csv(

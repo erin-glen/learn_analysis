@@ -19,6 +19,13 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     year1 = int(year1)
     year2 = int(year2)
 
+    # Assuming you have a config dictionary or object
+    config = {
+        'emissions_factor': 103,
+        'removals_factor': -3.53,
+        'c_to_co2': 44 / 12,
+    }
+
     # Build the input configuration dictionary
     input_config = {
         "nlcd_1": os.path.join(DATA_FOLDER, "LandCover", f"NLCD_{year1}_Land_Cover_l48_20210604.tif"),
@@ -71,5 +78,10 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
             selected_disturbance_rasters.append(disturbance_raster_path)
 
     input_config["disturbance_rasters"] = selected_disturbance_rasters
+
+    # Add emissions_factor, removals_factor, and c_to_co2 to input_config
+    input_config['emissions_factor'] = config['emissions_factor']
+    input_config['removals_factor'] = config['removals_factor']
+    input_config['c_to_co2'] = config['c_to_co2']
 
     return input_config
