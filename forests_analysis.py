@@ -1,7 +1,7 @@
 # forests_analysis.py
 
 import os
-from datetime import datetime
+from datetime import datetime as dt
 import arcpy
 import pandas as pd
 from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
@@ -10,14 +10,15 @@ from funcs import save_results, summarize_ghg
 
 def main():
     # User inputs
-    year1 = input("Enter Year 1: ")
+    year1 = input("Enter Year 1: ").strip()
     assert year1 in VALID_YEARS, f"{year1} is not a valid year."
 
-    year2 = input("Enter Year 2: ")
+    year2 = input("Enter Year 2: ").strip()
     assert year2 in VALID_YEARS, f"{year2} is not a valid year."
 
-    aoi_shapefile = input("Enter path to the AOI shapefile: ")
-    id_field = input("Enter the unique ID field in the shapefile: ")
+    # Hardcoded AOI shapefile path and unique ID field
+    aoi_shapefile = r"C:\GIS\Data\LEARN\SourceData\AOI\PADUS_BLM_USFS_STATE_PRJ.shp"
+    id_field = "FID"
 
     # Input configuration
     input_config = get_input_config(year1, year2)
@@ -25,7 +26,16 @@ def main():
     input_config["year1"] = int(year1)
     input_config["year2"] = int(year2)
 
-    start_time = datetime.now()
+    # Retrieve emissions_factor and removals_factor from input_config
+    emissions_factor = input_config.get("emissions_factor", None)
+    removals_factor = input_config.get("removals_factor", None)
+    c_to_co2 = input_config.get("c_to_co2", 44 / 12)  # Default value if not provided
+
+    # Ensure that emissions_factor and removals_factor are provided
+    if emissions_factor is None or removals_factor is None:
+        raise ValueError("Emissions factor and removals factor must be provided in the configuration.")
+
+    start_time = dt.now()
 
     # Output directory
     date_str = start_time.strftime("%Y_%m_%d")
@@ -53,7 +63,12 @@ def main():
 
                 # Perform analysis
                 landuse_result, forest_type_result = perform_analysis(
-                    input_config, CELL_SIZE, int(year1), int(year2), analysis_type='forest'
+                    input_config,
+                    CELL_SIZE,
+                    int(year1),
+                    int(year2),
+                    analysis_type='forest',
+                    tree_canopy_source=None  # Set to None or appropriate value if needed
                 )
 
                 if landuse_result is None or forest_type_result is None:
@@ -61,7 +76,16 @@ def main():
                     continue
 
                 years_difference = int(year2) - int(year1)
-                ghg_result = summarize_ghg(landuse_result, forest_type_result, years_difference)
+
+                # Pass new parameters to summarize_ghg
+                ghg_result = summarize_ghg(
+                    landuse_df=landuse_result,
+                    forest_type_df=forest_type_result,
+                    years=years_difference,
+                    emissions_factor=emissions_factor,
+                    removals_factor=removals_factor,
+                    c_to_co2=c_to_co2,
+                )
                 ghg_result["Geography_ID"] = geography_id
 
                 all_results.append(ghg_result)
@@ -79,7 +103,7 @@ def main():
     else:
         arcpy.AddWarning("No results to save.")
 
-    arcpy.AddMessage(f"Total processing time: {datetime.now() - start_time}")
+    arcpy.AddMessage(f"Total processing time: {dt.now() - start_time}")
 
 if __name__ == "__main__":
     main()
