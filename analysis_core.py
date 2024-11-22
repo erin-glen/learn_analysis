@@ -28,13 +28,15 @@ from funcs import (
 )
 from lookups import nlcdParentRollupCategories
 
+
 def perform_analysis(
-    input_config: dict,
-    cell_size: int,
-    year1: int,
-    year2: int,
-    analysis_type: str = 'community',
-    tree_canopy_source: str = None
+        input_config: dict,
+        cell_size: int,
+        year1: int,
+        year2: int,
+        analysis_type: str = 'community',
+        tree_canopy_source: str = None,
+        recategorize_mode: bool = False  # New parameter added
 ) -> tuple:
     """
     Performs the land use change analysis.
@@ -46,6 +48,7 @@ def perform_analysis(
         year2 (int): Subsequent year.
         analysis_type (str): Type of analysis ('community' or 'forest').
         tree_canopy_source (str, optional): Tree canopy data source identifier (if applicable).
+        recategorize_mode (bool, optional): If True, applies recategorization based on disturbances. Defaults to False.
 
     Returns:
         tuple: DataFrames for land use results and forest type results.
@@ -126,6 +129,27 @@ def perform_analysis(
 
         # Determine category
         landuse_df["Category"] = landuse_df.apply(determine_landuse_category, axis=1)
+
+        # Recategorize based on disturbances if recategorize_mode is True
+        if recategorize_mode:
+            # Conditions to identify records to recategorize
+            recat_conditions = (
+                    (landuse_df["Category"] == "Forest to Grassland") &
+                    (
+                            (landuse_df["fire_HA"] > 0) |
+                            (landuse_df["insect_damage_HA"] > 0) |
+                            (landuse_df["harvest_HA"] > 0)
+                    )
+            )
+
+            # Apply recategorization
+            recategorize_count = recat_conditions.sum()
+            if recategorize_count > 0:
+                arcpy.AddMessage(
+                    f"Recategorizing {recategorize_count} records from 'Forest to Grassland' to 'Forest Remaining Forest' based on disturbances.")
+                landuse_df.loc[recat_conditions, "Category"] = "Forest Remaining Forest"
+            else:
+                arcpy.AddMessage("No records met the recategorization criteria.")
 
         # Calculate emissions from forest to non-forest
         landuse_df["Total Emissions Forest to Non Forest CO2"] = landuse_df.apply(
