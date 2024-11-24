@@ -29,12 +29,12 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     # Define AOI-specific emissions and removals factors
     aoi_specific_factors = {
         'Montgomery': {
-            'emissions_factor': 100,   # Replace with the actual value for Montgomery
-            'removals_factor': -3.0,   # Replace with the actual value for Montgomery
+            'emissions_factor': 103,   # Replace with the actual value for Montgomery
+            'removals_factor': -3.53,   # Replace with the actual value for Montgomery
         },
         'Jefferson': {
-            'emissions_factor': 105,   # Replace with the actual value for Jefferson
-            'removals_factor': -3.8,   # Replace with the actual value for Jefferson
+            'emissions_factor': 95.9,   # Replace with the actual value for Jefferson
+            'removals_factor': 2.82,   # Replace with the actual value for Jefferson
         },
     }
 
