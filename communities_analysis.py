@@ -13,14 +13,14 @@ from funcs import (
 
 def main():
     # User inputs
-    year1 = input("Enter Year 1: ")
+    year1 = input("Enter Year 1: ").strip()
     assert year1 in VALID_YEARS, f"{year1} is not a valid year."
 
-    year2 = input("Enter Year 2: ")
+    year2 = input("Enter Year 2: ").strip()
     assert year2 in VALID_YEARS, f"{year2} is not a valid year."
 
-    aoi_name = input("Enter the AOI name: ")
-    tree_canopy_source = input("Select Tree Canopy source (NLCD, CBW, Local): ")
+    aoi_name = input("Enter the AOI name: ").strip()
+    tree_canopy_source = input("Select Tree Canopy source (NLCD, CBW, Local): ").strip()
     assert tree_canopy_source in ["NLCD", "CBW", "Local"], f"{tree_canopy_source} is not valid."
 
     # Input configuration

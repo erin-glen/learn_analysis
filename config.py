@@ -19,19 +19,41 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     year1 = int(year1)
     year2 = int(year2)
 
-    # Assuming you have a config dictionary or object
-    config = {
-        'emissions_factor': 103,
-        'removals_factor': -3.53,
+    # Define default emissions and removals factors
+    default_config = {
+        'emissions_factor': 103,      # Default emissions factor (tC/ha)
+        'removals_factor': -3.53,     # Default removals factor (tC/ha/yr)
         'c_to_co2': 44 / 12,
     }
+
+    # Define AOI-specific emissions and removals factors
+    aoi_specific_factors = {
+        'Montgomery': {
+            'emissions_factor': 100,   # Replace with the actual value for Montgomery
+            'removals_factor': -3.0,   # Replace with the actual value for Montgomery
+        },
+        'Jefferson': {
+            'emissions_factor': 105,   # Replace with the actual value for Jefferson
+            'removals_factor': -3.8,   # Replace with the actual value for Jefferson
+        },
+    }
+
+    # Initialize config with default values
+    config = default_config.copy()
+
+    # If AOI name is provided and matches one in the specific factors, update the config
+    if aoi_name and aoi_name in aoi_specific_factors:
+        config.update(aoi_specific_factors[aoi_name])
+    else:
+        # Optionally, you can raise an error or warning if AOI name is not recognized
+        print(f"Warning: AOI '{aoi_name}' not found in specific factors. Using default values.")
 
     # Build the input configuration dictionary
     input_config = {
         "nlcd_1": os.path.join(DATA_FOLDER, "LandCover", f"NLCD_{year1}_Land_Cover_l48_20210604.tif"),
         "nlcd_2": os.path.join(DATA_FOLDER, "LandCover", f"NLCD_{year2}_Land_Cover_l48_20210604.tif"),
         "forest_age_raster": os.path.join(DATA_FOLDER, "ForestType", "forest_raster_07232020.tif"),
-        "carbon_ag_bg_us": os.path.join(DATA_FOLDER, "Carbon", "bigmap", "carbon_ag_bg_us.tif"),
+        "carbon_ag_bg_us": os.path.join(DATA_FOLDER, new_carbon, "carbon_ag_bg_us.tif"),
         "carbon_sd_dd_lt": os.path.join(DATA_FOLDER, new_carbon, "carbon_sd_dd_lt.tif"),
         "carbon_so": os.path.join(DATA_FOLDER, new_carbon, "carbon_so.tif"),
         "forest_lookup_csv": os.path.join(DATA_FOLDER, "ForestType", "forest_raster_09172020.csv"),
