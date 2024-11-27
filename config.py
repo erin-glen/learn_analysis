@@ -34,7 +34,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
         },
         'Jefferson': {
             'emissions_factor': 95.9,   # Replace with the actual value for Jefferson
-            'removals_factor': 2.82,   # Replace with the actual value for Jefferson
+            'removals_factor': -2.82,   # Replace with the actual value for Jefferson
         },
     }
 
