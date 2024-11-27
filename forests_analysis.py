@@ -9,6 +9,15 @@ from analysis_core import perform_analysis
 from funcs import save_results, summarize_ghg
 
 def main(mode=None):
+    """
+    Main function to execute forest analysis.
+
+    Args:
+        mode (str, optional): Mode of operation.
+                              - 'test' to run in test mode.
+                              - 'recategorize' to enable recategorization based on disturbances.
+                              Defaults to None.
+    """
     # User inputs
     year1 = input("Enter Year 1: ").strip()
     assert year1 in VALID_YEARS, f"{year1} is not a valid year."
@@ -50,6 +59,14 @@ def main(mode=None):
     # Initialize results list
     all_results = []
 
+    # Determine the recategorize_mode flag based on the mode parameter
+    recategorize_mode = False
+    if mode == 'recategorize':
+        recategorize_mode = True
+        arcpy.AddMessage("Recategorization mode is enabled.")
+    elif mode == 'test':
+        arcpy.AddMessage("Test mode is enabled. Only the first geography will be processed.")
+
     # Process each geography
     with arcpy.da.SearchCursor(aoi_shapefile, [id_field, "SHAPE@"]) as cursor:
         for idx, row in enumerate(cursor):
@@ -61,14 +78,15 @@ def main(mode=None):
                 input_config["aoi"] = aoi_temp
                 input_config["geography_id"] = geography_id
 
-                # Perform analysis
+                # Perform analysis with the recategorize_mode flag
                 landuse_result, forest_type_result = perform_analysis(
                     input_config,
                     CELL_SIZE,
                     int(year1),
                     int(year2),
                     analysis_type='forest',
-                    tree_canopy_source=None  # Set to None or appropriate value if needed
+                    tree_canopy_source=None,  # Set to None or appropriate value if needed
+                    recategorize_mode=recategorize_mode  # Pass the new flag
                 )
 
                 if landuse_result is None or forest_type_result is None:
@@ -121,6 +139,7 @@ def main(mode=None):
     arcpy.AddMessage(f"Total processing time: {dt.now() - start_time}")
 
 if __name__ == "__main__":
+    # To run in recategorize mode, call main('recategorize')
     # To run in test mode, call main('test')
     # To run normally, call main()
-    main()
+    main('recategorize')  # Example: enable recategorize mode
