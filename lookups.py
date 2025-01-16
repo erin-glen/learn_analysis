@@ -82,3 +82,16 @@ carbonStockLoss = {
         "soil organic": 1,
     }
 }
+
+mogLookup = {
+    1: "Early",
+    2: "Intermediate",
+    3: "Mature",
+    4: "Old-Growth"
+}
+gapLookup = {
+    1: "GAP1",
+    2: "GAP2",
+    3: "GAP3",
+    4: "GAP4"
+}
