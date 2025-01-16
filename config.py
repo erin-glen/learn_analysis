@@ -52,7 +52,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     input_config = {
         "nlcd_1": os.path.join(DATA_FOLDER, "LandCover", f"NLCD_{year1}_Land_Cover_l48_20210604.tif"),
         "nlcd_2": os.path.join(DATA_FOLDER, "LandCover", f"NLCD_{year2}_Land_Cover_l48_20210604.tif"),
-        "forest_age_raster": os.path.join(DATA_FOLDER, "ForestType", "forest_raster_07232020.tif"),
+        "forest_age_raster": os.path.join(DATA_FOLDER, "ForestType", "forest_raster_01062025.tif"),
         "carbon_ag_bg_us": os.path.join(DATA_FOLDER, new_carbon, "carbon_ag_bg_us.tif"),
         "carbon_sd_dd_lt": os.path.join(DATA_FOLDER, new_carbon, "carbon_sd_dd_lt.tif"),
         "carbon_so": os.path.join(DATA_FOLDER, new_carbon, "carbon_so.tif"),
@@ -67,9 +67,9 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     # Add tree canopy paths if provided
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD")
-            input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4.tif")
-            input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4.tif")
+            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
+            input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif")
+            input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif")
         elif tree_canopy_source == "CBW":
             tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "CBW")
             input_config["tree_canopy_1"] = os.path.join(tc_folder, "cbw_2013_treecanopy_Agg30m_int.tif")
@@ -83,6 +83,10 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Define disturbance rasters with their corresponding year ranges
     disturbance_rasters_info = [
+        {"name": "disturbance_0104.tif", "start_year": 2001, "end_year": 2004},
+        {"name": "disturbance_0406.tif", "start_year": 2004, "end_year": 2006},
+        {"name": "disturbance_0608.tif", "start_year": 2006, "end_year": 2008},
+        {"name": "disturbance_0811.tif", "start_year": 2008, "end_year": 2011},
         {"name": "disturbance_1113.tif", "start_year": 2011, "end_year": 2013},
         {"name": "disturbance_1316.tif", "start_year": 2013, "end_year": 2016},
         {"name": "disturbance_1619.tif", "start_year": 2016, "end_year": 2019},
