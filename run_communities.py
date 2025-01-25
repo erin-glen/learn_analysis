@@ -16,12 +16,12 @@ def run_analysis_for_aoi_and_period(year1, year2, aoi_name, tree_canopy_source):
 
 if __name__ == "__main__":
     # Define the AOIs and inventory periods
-    aois = ['Jefferson', 'Montgomery']
-    # aois = ['Montgomery']
+    # aois = ['Jefferson', 'Montgomery']
+    aois = ['Montgomery']
     inventory_periods = [
         (2013, 2016),
-        (2016, 2019),
-        (2019, 2021),
+        # (2016, 2019),
+        # (2019, 2021),
     ]
     tree_canopy_source = 'NLCD'  # Set tree canopy source to 'NLCD' for all runs
 
