@@ -14,8 +14,8 @@ def run_analysis_for_period(year1, year2, mode=None):
 if __name__ == "__main__":
     # Define the inventory periods you want to run
     inventory_periods = [
-        (2001, 2004),
         (2004, 2006),
+        (2006, 2008),
         (2008, 2011),
         (2011, 2013),
         (2013, 2016),
