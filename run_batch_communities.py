@@ -16,47 +16,100 @@ from communities_analysis import (
     write_enhanced_summary_csv,
 )
 
+
 def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
     """
     Calculate gross emissions, gross removals, and net flux from a GHG DataFrame
-    that has separate numeric columns "Emissions" and "Removals".
-    (We assume you've already called split_emissions_removals on the DataFrame.)
+    that already has numeric "Emissions" and "Removals" columns
+    (after calling 'split_emissions_removals').
     """
     if "Emissions" not in ghg_df.columns or "Removals" not in ghg_df.columns:
         return (0.0, 0.0, 0.0)
 
-    # Gross emissions = sum of all positive emission values
+    # Sum positive emission values
     gross_emissions = ghg_df["Emissions"].where(ghg_df["Emissions"] > 0, 0).sum()
 
-    # Gross removals = sum of negative removal values (most likely negative)
-    # Some workflows keep them negative, so we sum only negative entries
+    # Sum negative removals (since typically Removals are negative)
     gross_removals = ghg_df["Removals"].where(ghg_df["Removals"] < 0, 0).sum()
 
-    # Net flux = sum(gross emissions + gross removals)
+    # Net flux = sum of gross emissions + gross removals
     net_flux = gross_emissions + gross_removals
     return (gross_emissions, gross_removals, net_flux)
 
 
+def build_inventory_rows(ghg_df: pd.DataFrame, feature_id: str, year_range: str) -> pd.DataFrame:
+    """
+    Build the entire GHG inventory for this feature & year range, but
+    combine Emissions + Removals into a single column "GHG flux (t CO2 / year)".
+
+    Final columns:
+      - FeatureID
+      - YearRange
+      - Category
+      - Type
+      - Emissions/Removals
+      - Area (ha, total)
+      - GHG flux (t CO2 / year)
+
+    We assume 'split_emissions_removals' has been called, so "Emissions" and "Removals" exist.
+    """
+    # Ensure necessary columns exist
+    needed_cols = ["Category", "Type", "Emissions/Removals", "Area (ha, total)", "Emissions", "Removals"]
+    for col in needed_cols:
+        if col not in ghg_df.columns:
+            ghg_df[col] = 0  # or blank
+
+    # Create a copy with only the needed columns
+    inventory_df = ghg_df[needed_cols].copy()
+
+    # Combine Emissions + Removals into one column
+    # Emissions are typically >=0, Removals <=0, so the sum is that row's net flux
+    inventory_df["GHG flux (t CO2 / year)"] = inventory_df["Emissions"] + inventory_df["Removals"]
+
+    # Insert FeatureID, YearRange
+    inventory_df["FeatureID"] = feature_id
+    inventory_df["YearRange"] = year_range
+
+    # Drop the separate Emissions, Removals columns
+    inventory_df.drop(["Emissions", "Removals"], axis=1, inplace=True)
+
+    # Reorder for readability
+    columns_order = [
+        "FeatureID",
+        "YearRange",
+        "Category",
+        "Type",
+        "Emissions/Removals",
+        "Area (ha, total)",
+        "GHG flux (t CO2 / year)"
+    ]
+    inventory_df = inventory_df[columns_order]
+
+    return inventory_df
+
+
 def process_feature(
-    feature_id,
-    geometry,
-    year1,
-    year2,
-    tree_canopy_source,
-    output_base_folder
+        feature_id,
+        geometry,
+        year1,
+        year2,
+        tree_canopy_source,
+        output_base_folder
 ) -> dict:
     """
-    Process a single feature geometry:
-      - Build input_config
-      - run perform_analysis
-      - produce the 4-table "enhanced summary" CSV,
-        plus landuse_result & forest_type_result CSVs
-      - compute gross/net flux
+    Process one feature geometry: run the communities analysis,
+    produce landuse_result, forest_type_result, summary CSV for that feature,
+    then return both single-row gross/net flux AND the multi-row GHG inventory.
 
-    Returns a dictionary for the "master" summary with gross/net flux, or an empty dict on failure.
+    Return:
+      {
+        "flux_row": {FeatureID, YearRange, GrossEmissions, ...},
+        "inventory_rows": <DataFrame of full GHG inventory with 1 row per category/type>
+      }
+      or empty dict on error.
     """
     try:
-        # Copy geometry to in_memory
+        # Copy geometry
         aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{feature_id}")
 
         # Prepare config
@@ -66,8 +119,7 @@ def process_feature(
         input_config["year2"] = year2
         input_config["aoi"] = aoi_temp
 
-        # Output folder for this feature (something like "FeatureID_2013_2016_<timestamp>")
-        # or you might just store them all in a single folder for the entire shapefile.
+        # Output folder for this feature
         timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
         feature_folder = os.path.join(
             output_base_folder,
@@ -89,17 +141,16 @@ def process_feature(
             arcpy.management.Delete(aoi_temp)
             return {}
 
-        # Write raw CSVs (landuse, forest_type)
+        # Save raw CSVs
         landuse_csv = os.path.join(feature_folder, f"landuse_result_{timestamp}.csv")
         forest_csv = os.path.join(feature_folder, f"forest_type_result_{timestamp}.csv")
         landuse_result.to_csv(landuse_csv, index=False)
         forest_type_result.to_csv(forest_csv, index=False)
 
-        # Summaries for "enhanced" 4-table CSV
+        # Summaries
         landuse_matrix = create_land_cover_transition_matrix(landuse_result)
         tree_canopy_df = summarize_tree_canopy(landuse_result)
 
-        # Summarize GHG
         years_diff = year2 - year1
         ghg_df = summarize_ghg(
             landuse_df=landuse_result,
@@ -107,12 +158,15 @@ def process_feature(
             years=years_diff,
             emissions_factor=input_config["emissions_factor"],
             removals_factor=input_config["removals_factor"],
-            c_to_co2=input_config.get("c_to_co2", 44/12),
+            c_to_co2=input_config.get("c_to_co2", 44 / 12),
         )
+        # Split single "Emissions/Removals" into numeric columns "Emissions" & "Removals"
         ghg_df = split_emissions_removals(ghg_df)
+
+        # IPCC summary
         ipcc_df = create_ipcc_summary(ghg_df)
 
-        # Write the 4-table summary CSV
+        # Write 4-table summary
         summary_csv = os.path.join(feature_folder, f"summary_{timestamp}.csv")
         write_enhanced_summary_csv(
             summary_csv,
@@ -124,18 +178,25 @@ def process_feature(
             str(year2)
         )
 
-        # Calculate gross, net
+        # Single-row flux result
         gross_emissions, gross_removals, net_flux = calculate_gross_net_flux(ghg_df)
+        flux_dict = {
+            "FeatureID": feature_id,
+            "YearRange": f"{year1}-{year2}",
+            "GrossEmissions": round(gross_emissions, 2),
+            "GrossRemovals": round(gross_removals, 2),
+            "NetFlux": round(net_flux, 2),
+        }
+
+        # Multi-row inventory
+        inventory_df = build_inventory_rows(ghg_df, feature_id, f"{year1}-{year2}")
 
         # Cleanup
         arcpy.management.Delete(aoi_temp)
 
         return {
-            "FeatureID": feature_id,
-            "YearRange": f"{year1}-{year2}",
-            "GrossEmissions": round(gross_emissions, 2),
-            "GrossRemovals": round(gross_removals, 2),
-            "NetFlux": round(net_flux, 2)
+            "flux_row": flux_dict,
+            "inventory_rows": inventory_df,
         }
 
     except Exception as e:
@@ -144,30 +205,32 @@ def process_feature(
 
 
 def run_batch_for_scale(
-    shapefile: str,
-    id_field: str,
-    inventory_periods: list,
-    tree_canopy_source: str,
-    scale_name: str,
-    date_str: str
-) -> None:
+        shapefile: str,
+        id_field: str,
+        inventory_periods: list,
+        tree_canopy_source: str,
+        scale_name: str,
+        date_str: str
+):
     """
-    For the given shapefile (scale), run communities_analysis for each
-    feature, each inventory period, saving a full 4-table output each time
-    AND building a master CSV with gross/net flux rows.
+    For the given shapefile (scale):
+      - For each inventory period, iterate over each feature
+      - Write full communities_analysis outputs (landuse/forest + 4-table summary) in a subfolder
+      - Collect a single 'flux_row' for each feature+period, plus the full inventory rows
+    Then produce two "master" CSVs at the scale level:
+      - master_flux_{scale_name}.csv  => one row per feature+period (gross/net flux)
+      - master_inventory_{scale_name}.csv => multi-rows per feature+period, with the GHG flux in a single column
     """
-    # Create a single folder for this scale
     scale_folder = os.path.join(OUTPUT_BASE_DIR, f"{date_str}_{scale_name}")
     os.makedirs(scale_folder, exist_ok=True)
 
-    # We'll accumulate (FeatureID, YearRange, Emissions, Removals, NetFlux) in a list
-    master_rows = []
+    all_flux_rows = []
+    all_inventory_rows = []
 
     for (year1, year2) in inventory_periods:
         arcpy.AddMessage(f"Processing scale='{scale_name}', period={year1}-{year2}")
-        # Validate
         if str(year1) not in VALID_YEARS or str(year2) not in VALID_YEARS:
-            arcpy.AddWarning(f"Invalid years: {year1}-{year2} ... skipping.")
+            arcpy.AddWarning(f"Invalid years: {year1}-{year2}, skipping.")
             continue
 
         with arcpy.da.SearchCursor(shapefile, [id_field, "SHAPE@"]) as cursor:
@@ -175,7 +238,8 @@ def run_batch_for_scale(
                 feature_id = row[0]
                 geometry = row[1]
                 arcpy.AddMessage(f"  -> FeatureID={feature_id}, {year1}-{year2}")
-                result_dict = process_feature(
+
+                result_data = process_feature(
                     feature_id=feature_id,
                     geometry=geometry,
                     year1=year1,
@@ -183,42 +247,62 @@ def run_batch_for_scale(
                     tree_canopy_source=tree_canopy_source,
                     output_base_folder=scale_folder
                 )
-                if result_dict:
-                    master_rows.append(result_dict)
+                if not result_data:
+                    continue  # skip on error
 
-    # After all features & periods, create a "master" CSV with gross/net flux
-    if master_rows:
-        df_master = pd.DataFrame(master_rows)
-        master_csv = os.path.join(scale_folder, f"master_{scale_name}.csv")
-        df_master.to_csv(master_csv, index=False)
-        arcpy.AddMessage(f"Wrote master CSV for scale='{scale_name}': {master_csv}")
+                # Extract the single flux row and the multi-row inventory
+                flux_dict = result_data["flux_row"]
+                inventory_df = result_data["inventory_rows"]
+
+                all_flux_rows.append(flux_dict)
+                all_inventory_rows.append(inventory_df)
+
+    # After all features/periods, build master CSVs
+    if all_flux_rows:
+        df_flux = pd.DataFrame(all_flux_rows)
+        master_flux_csv = os.path.join(scale_folder, f"master_flux_{scale_name}.csv")
+        df_flux.to_csv(master_flux_csv, index=False)
+        arcpy.AddMessage(f"    => Wrote flux summary for scale='{scale_name}' -> {master_flux_csv}")
     else:
-        arcpy.AddWarning(f"No results at all for scale='{scale_name}'.")
+        arcpy.AddWarning(f"No flux rows found for scale='{scale_name}'.")
+
+    if all_inventory_rows:
+        df_inventory = pd.concat(all_inventory_rows, ignore_index=True)
+        master_inv_csv = os.path.join(scale_folder, f"master_inventory_{scale_name}.csv")
+        df_inventory.to_csv(master_inv_csv, index=False)
+        arcpy.AddMessage(f"    => Wrote full inventory for scale='{scale_name}' -> {master_inv_csv}")
+    else:
+        arcpy.AddWarning(f"No inventory rows found for scale='{scale_name}'.")
 
 
 def main():
     """
-    Example batch script that:
-      - Takes multiple scales (shapefiles + ID field + tree canopy).
-      - Takes multiple inventory periods.
-      - For each scale & period & feature, runs the full communities workflow
-        and produces landuse_result, forest_type_result, summary_4table CSVs.
-      - Meanwhile, collects a single row of "GrossEmissions/GrossRemovals/NetFlux"
-        from each run in a scale-level "master" CSV.
+    Batch script for communities_analysis that:
+      - For each scale & inventory period & feature, produces
+        landuse/forest CSV + 4-table summary in a subfolder
+      - Collects two "master" CSVs at the scale level:
+        * master_flux_{scale_name}.csv => one row per feature+period (gross/net flux)
+        * master_inventory_{scale_name}.csv => multiple rows per feature+period
+          with 'GHG flux (t CO2 / year)' instead of separate Emissions/Removals
     """
 
     # 1) Inventory Periods
     inventory_periods = [
         (2013, 2016),
         (2016, 2019),
-        (2019, 2021),
     ]
 
     # 2) Scales Info
     scales_info = [
         {
             "scale_name": "az_counties",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties.shp",
+            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_test\az_test.shp",
+            "id_field": "NAME",
+            "tree_canopy_source": "NLCD"
+        },
+        {
+            "scale_name": "az_cities",
+            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_test\az_test.shp",
             "id_field": "NAME",
             "tree_canopy_source": "NLCD"
         }
@@ -234,7 +318,7 @@ def main():
         id_field = s_info["id_field"]
         tree_canopy_source = s_info["tree_canopy_source"]
 
-        arcpy.AddMessage(f"\n=== Running batch for scale='{scale_name}' ===")
+        arcpy.AddMessage(f"\n=== Running communities batch for scale='{scale_name}' ===")
         run_batch_for_scale(
             shapefile=shapefile,
             id_field=id_field,
