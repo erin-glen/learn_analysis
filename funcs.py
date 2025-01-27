@@ -474,15 +474,18 @@ def zonal_sum_carbon(
     return carbon_df
 
 
-def calculate_forest_to_nonforest_emissions(row: pd.Series) -> float:
+def calculate_forest_to_nonforest_emissions(row: pd.Series, years_diff: int) -> float:
     """
-    Calculate emissions from forest to non-forest land use changes.
+    Calculate *annual* emissions (t CO2/yr) from forest to non-forest changes,
+    dividing total flux by 'years_diff'.
 
     Args:
-        row (pd.Series): Row from a DataFrame.
+        row (pd.Series): Row from landuse_df, including carbon stocks, category, etc.
+        years_diff (int): The number of years between year1 and year2
+                          (e.g. 3 for 2013-2016).
 
     Returns:
-        float: Emissions in metric tons of CO2.
+        float: Annual forest-to-nonforest emissions (t CO2/yr).
     """
     categories = [
         "Forest to Settlement",
@@ -496,10 +499,14 @@ def calculate_forest_to_nonforest_emissions(row: pd.Series) -> float:
         ag_bg = row["carbon_ag_bg_us"] * carbonStockLoss[end_class]["biomass"]
         sd_dd = row["carbon_sd_dd_lt"] * carbonStockLoss[end_class]["dead organic matter"]
         so = row["carbon_so"] * carbonStockLoss[end_class]["soil organic"]
-        result = (ag_bg + sd_dd + so) * 44 / 12  # Convert C to CO2
+
+        total_c_loss = ag_bg + sd_dd + so  # total carbon lost
+        total_co2_loss = total_c_loss * (44 / 12)  # convert C to CO2
+
+        # Now divide by years_diff to get an ANNUAL rate (t CO2/yr)
+        return total_co2_loss / years_diff
     else:
-        result = 0.0
-    return result
+        return 0.0
 
 
 def determine_landuse_category(row: pd.Series) -> str:
@@ -845,20 +852,20 @@ def calculate_ghg_flux(
     c_to_co2: float = 44 / 12,
 ) -> int:
     """
-    Calculate GHG flux for a specific category and type.
+    Calculate GHG flux for a specific category and type (in t CO2e/yr).
 
     Args:
-        category (str): Main category.
-        type_: str): Specific type within the category.
-        landuse_df (pd.DataFrame): Land use DataFrame.
-        forest_type_df (pd.DataFrame): Forest type DataFrame.
-        years (int): Number of years between observations.
+        category (str): Main category (e.g., "Forest Change").
+        type_ (str): Specific type (e.g., "To Settlement").
+        landuse_df (pd.DataFrame): Land use DataFrame (already annual for forest-to-nonforest).
+        forest_type_df (pd.DataFrame): Forest type DataFrame (already annual for disturbances).
+        years (int): Number of years between observations (no longer used for forest-to-nonforest).
         emissions_factor (float, optional): Emission factor for trees outside forests.
         removals_factor (float, optional): Removal factor for trees outside forests.
         c_to_co2 (float, optional): Conversion factor from carbon to CO2.
 
     Returns:
-        int: GHG flux in metric tons of CO2e per year.
+        int: GHG flux in metric tons of CO2e per year (rounded to int).
     """
     if category == "Forest Change":
         mapping = {
@@ -871,18 +878,21 @@ def calculate_ghg_flux(
         }
         key = mapping.get(type_)
         if key:
+            # For "Reforestation", we get annual removals from forest_type_df
             if type_ == "Reforestation (Non-Forest to Forest)":
                 ghg = forest_type_df.loc[
-                    forest_type_df["Category"] == key, "Annual_Removals_N_to_F_CO2"
+                    forest_type_df["Category"] == key,
+                    "Annual_Removals_N_to_F_CO2"
                 ].sum()
             else:
-                ghg = (
-                    landuse_df.loc[
-                        landuse_df["Category"] == key, "Total Emissions Forest to Non Forest CO2"
-                    ].sum()
-                    / years
-                )
+                # For forest-to-nonforest, use the new annual column name
+                # e.g., "Annual Emissions Forest to Non Forest CO2"
+                ghg = landuse_df.loc[
+                    landuse_df["Category"] == key,
+                    "Annual Emissions Forest to Non Forest CO2"
+                ].sum()
             return int(ghg)
+
     elif category == "Forest Remaining Forest":
         columns_mapping = {
             "Undisturbed": "Annual_Removals_Undisturbed_CO2",
@@ -893,29 +903,38 @@ def calculate_ghg_flux(
         column = columns_mapping.get(type_)
         if column:
             ghg = forest_type_df.loc[
-                forest_type_df["Category"] == "Forest Remaining Forest", column
+                forest_type_df["Category"] == "Forest Remaining Forest",
+                column
             ].sum()
             return int(ghg)
+
     elif category == "Trees Outside Forest":
+        # For "Tree canopy loss" or "Canopy maintained/gained",
+        # we do the same approach as before, potentially dividing or not by `years`.
         if type_ == "Tree canopy loss" and "TreeCanopyLoss_HA" in landuse_df.columns:
             if emissions_factor is None:
                 raise ValueError("Emissions factor is required for tree canopy loss emissions calculation.")
             area = landuse_df.loc[
-                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopyLoss_HA"
+                landuse_df["Category"] == "Nonforest to Nonforest",
+                "TreeCanopyLoss_HA"
             ].sum()
+            # Possibly keep dividing by years if you want it to be annual
             ghg = (area * emissions_factor * c_to_co2) / years
             return int(ghg)
         elif type_ == "Canopy maintained/gained" and "TreeCanopy_HA" in landuse_df.columns:
             if removals_factor is None:
                 raise ValueError("Removals factor is required for canopy maintained/gained removals calculation.")
             area = landuse_df.loc[
-                landuse_df["Category"] == "Nonforest to Nonforest", "TreeCanopy_HA"
+                landuse_df["Category"] == "Nonforest to Nonforest",
+                "TreeCanopy_HA"
             ].sum()
             ghg = area * removals_factor * c_to_co2
             return int(ghg)
         else:
             return 0
+
     return 0
+
 
 def summarize_ghg(
     landuse_df: pd.DataFrame,
