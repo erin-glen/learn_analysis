@@ -19,20 +19,28 @@ from communities_analysis import (
 
 def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
     """
-    Calculate gross emissions, gross removals, and net flux from a GHG DataFrame
-    that already has numeric "Emissions" and "Removals" columns
-    (after calling 'split_emissions_removals').
+    Calculate gross emissions, gross removals, and net flux.
+    BUT we rely on ghg_df["Emissions/Removals"] to decide
+    which sum to place it in, *not* the sign of flux.
     """
     if "Emissions" not in ghg_df.columns or "Removals" not in ghg_df.columns:
         return (0.0, 0.0, 0.0)
 
-    # Sum positive emission values
-    gross_emissions = ghg_df["Emissions"].where(ghg_df["Emissions"] > 0, 0).sum()
+    gross_emissions = 0.0
+    gross_removals = 0.0
 
-    # Sum negative removals (since typically Removals are negative)
-    gross_removals = ghg_df["Removals"].where(ghg_df["Removals"] < 0, 0).sum()
+    # We assume there's a "GHG Flux (t CO2e/year)" column with negative or positive values
+    for idx, row in ghg_df.iterrows():
+        flux = row["GHG Flux (t CO2e/year)"]
 
-    # Net flux = sum of gross emissions + gross removals
+        # If the row is labeled "Emissions," add flux to gross_emissions
+        # (even if flux is negative!)
+        if row["Emissions/Removals"] == "Emissions":
+            gross_emissions += flux
+        else:
+            # e.g. "Removals"
+            gross_removals += flux
+
     net_flux = gross_emissions + gross_removals
     return (gross_emissions, gross_removals, net_flux)
 
