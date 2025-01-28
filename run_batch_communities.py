@@ -357,27 +357,27 @@ def main():
       - Runs the normal "communities_analysis" for each feature
       - Summarizes results in master flux/inventory CSVs
     """
-    inventory_periods = [(2019,2021)]
+    inventory_periods = [(2001,2004),(2004,2006),(2006,2008),(2008,2011),(2011,2013),(2013,2016),(2016,2019),(2019,2021)]
 
     scales_info = [
-        {
-            "scale_name": "az_counties",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
-            "id_field": "NAME",
-            "tree_canopy_source": "NLCD"
-        },
-        {
-            "scale_name": "az_places",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
-            "id_field": "NAME",
-            "tree_canopy_source": "NLCD"
-        },
-        {
-            "scale_name": "az_tribal_nations",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_tribal_nations\shapefiles\az_tribal_nations\az_tribal_nations.shp",
-            "id_field": "NAME",
-            "tree_canopy_source": "NLCD"
-        },
+        # {
+        #     "scale_name": "az_counties",
+        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
+        #     "id_field": "NAME",
+        #     "tree_canopy_source": "NLCD"
+        # },
+        # {
+        #     "scale_name": "az_places",
+        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
+        #     "id_field": "NAME",
+        #     "tree_canopy_source": "NLCD"
+        # },
+        # {
+        #     "scale_name": "az_tribal_nations",
+        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_tribal_nations\shapefiles\az_tribal_nations\az_tribal_nations.shp",
+        #     "id_field": "NAME",
+        #     "tree_canopy_source": "NLCD"
+        # },
         {
             "scale_name": "az_state",
             "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_state\az_state\az_state.shp",
