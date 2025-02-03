@@ -1,3 +1,4 @@
+#analysis_core
 import arcpy
 import pandas as pd
 from funcs import (
