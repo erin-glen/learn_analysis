@@ -183,34 +183,32 @@ def process_feature(
         input_config["aoi"] = aoi_temp
 
         # --- NEW: If missing emission/removal factors, pull from shapefiles ---
-        # 1) Check & fill removal factor from state_removal_factors.shp
         if "removals_factor" not in input_config or input_config["removals_factor"] is None:
             (rem_factor, used_state) = get_removal_factor_by_state(aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp")
             input_config["removals_factor"] = rem_factor
         else:
             used_state = "ConfigProvided"
 
-        # 2) Check & fill emission factor from place_emission_factors.shp
         if "emissions_factor" not in input_config or input_config["emissions_factor"] is None:
             (em_factor, used_place) = get_emission_factor_by_nearest_place(aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\place_emission_factors.shp")
             input_config["emissions_factor"] = em_factor
         else:
             used_place = "ConfigProvided"
 
-        # Log what we used
         arcpy.AddMessage(
             f"Feature '{feature_id}' => TOF RemFactor={input_config['removals_factor']} from {used_state}, "
             f"TOF EmFactor={input_config['emissions_factor']} from {used_place}."
         )
 
-        # --- Then run the normal analysis ---
+        # --- Perform analysis with recategorize_mode enabled ---
         landuse_result, forest_type_result = perform_analysis(
             input_config,
             CELL_SIZE,
             year1,
             year2,
             analysis_type='community',
-            tree_canopy_source=tree_canopy_source
+            tree_canopy_source=tree_canopy_source,
+            recategorize_mode=False  # Enable recategorize option here
         )
         if landuse_result is None or forest_type_result is None:
             arcpy.AddWarning(f"Analysis returned None for feature={feature_id}.")
@@ -357,7 +355,7 @@ def main():
       - Runs the normal "communities_analysis" for each feature
       - Summarizes results in master flux/inventory CSVs
     """
-    inventory_periods = [(2001,2004),(2004,2006),(2006,2008),(2008,2011),(2011,2013),(2013,2016),(2016,2019),(2019,2021)]
+    inventory_periods = [(2011,2013),(2013,2016),(2016,2019),(2019,2021)]
 
     scales_info = [
         # {

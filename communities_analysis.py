@@ -1,3 +1,5 @@
+# communities_analysis.py
+
 import os
 from datetime import datetime as dt
 import arcpy
@@ -11,6 +13,17 @@ from funcs import (
     summarize_tree_canopy,
     create_land_cover_transition_matrix,
 )
+
+def round_results_df(df: pd.DataFrame, numeric_columns: list) -> pd.DataFrame:
+    """
+    Rounds specified numeric columns in the DataFrame to whole numbers and converts them to int.
+    Any non-finite values (e.g., NaN) are replaced with 0 to avoid casting errors.
+    This helps ensure Excel will interpret them as numbers rather than text.
+    """
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).round(0).astype(int)
+    return df
 
 def split_emissions_removals(ghg_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -29,7 +42,6 @@ def split_emissions_removals(ghg_df: pd.DataFrame) -> pd.DataFrame:
     ghg_df.loc[ghg_df["Emissions/Removals"] == "Removals", "Removals"] = flux_numeric
 
     return ghg_df
-
 
 def create_ipcc_summary(ghg_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -66,7 +78,6 @@ def create_ipcc_summary(ghg_df: pd.DataFrame) -> pd.DataFrame:
     summary.rename(columns={"IPCC_Category": "Category"}, inplace=True)
     return summary
 
-
 def dataframe_as_csv_string(df: pd.DataFrame, index: bool = False) -> str:
     """
     Convert to CSV text without extra blank lines on Windows.
@@ -74,7 +85,6 @@ def dataframe_as_csv_string(df: pd.DataFrame, index: bool = False) -> str:
     csv_str = df.to_csv(index=index)
     csv_str = csv_str.replace('\r\n', '\n').replace('\r', '')
     return csv_str
-
 
 def add_total_row_ghg(ghg_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -91,11 +101,10 @@ def add_total_row_ghg(ghg_df: pd.DataFrame) -> pd.DataFrame:
         "Area (ha, total)": "N/A",
         "Removals": sum_removals,
         "Emissions": sum_emissions,
-        # We'll drop "GHG Flux" etc. columns anyway
+        # We'll drop "GHG Flux" etc. columns later if not needed
     }
 
     return pd.concat([ghg_df, pd.DataFrame([total_row])], ignore_index=True)
-
 
 def write_enhanced_summary_csv(
     output_csv_path: str,
@@ -158,7 +167,6 @@ def write_enhanced_summary_csv(
         f.write(dataframe_as_csv_string(ipcc_summary, index=False))
         f.write("\n" * 5)
 
-
 def main():
     # 1) User Inputs
     year1 = input("Enter Year 1: ").strip()
@@ -209,8 +217,24 @@ def main():
         arcpy.AddError("Analysis failed.")
         return
 
-    # Optionally save raw DataFrames with the same timestamp
-    # We'll rename them to "landuse_result_{timestamp}.csv" etc.
+    # --- Rounding numeric columns before writing raw CSV outputs ---
+    landuse_numeric_cols = [
+        "Hectares", "CellCount",
+        "carbon_ag_bg_us", "carbon_sd_dd_lt", "carbon_so",
+        "fire_HA", "harvest_HA", "insect_damage_HA",
+        "TreeCanopy_HA", "TreeCanopyLoss_HA",
+        "Annual Emissions Forest to Non Forest CO2",
+    ]
+    forest_type_numeric_cols = [
+        "Hectares", "fire_HA", "harvest_HA", "insect_damage_HA", "undisturbed_HA",
+        "Annual_Removals_Undisturbed_CO2", "Annual_Removals_N_to_F_CO2",
+        "Annual_Emissions_Fire_CO2", "Annual_Emissions_Harvest_CO2", "Annual_Emissions_Insect_CO2"
+    ]
+    landuse_result = round_results_df(landuse_result, landuse_numeric_cols)
+    forest_type_result = round_results_df(forest_type_result, forest_type_numeric_cols)
+    # --------------------------------------------------------------------
+
+    # Save raw DataFrames with the same timestamp
     landuse_csv = os.path.join(output_path, f"landuse_result_{timestamp}.csv")
     forest_type_csv = os.path.join(output_path, f"forest_type_result_{timestamp}.csv")
     landuse_result.to_csv(landuse_csv, index=False)
@@ -246,7 +270,6 @@ def main():
 
     arcpy.AddMessage(f"Summary written to: {summary_csv}")
     arcpy.AddMessage(f"Total processing time: {dt.now() - start_time}")
-
 
 if __name__ == "__main__":
     main()
