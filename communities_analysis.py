@@ -22,7 +22,7 @@ def round_results_df(df: pd.DataFrame, numeric_columns: list) -> pd.DataFrame:
     """
     for col in numeric_columns:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).round(0).astype(int)
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).round(2).astype(float)
     return df
 
 def split_emissions_removals(ghg_df: pd.DataFrame) -> pd.DataFrame:
