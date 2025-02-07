@@ -19,9 +19,9 @@ logging.basicConfig(
 logging.info('Insect and Disease Rasterization Script Started.')
 
 # Define paths
-gdb_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS_Raw\raw_gdbs"  # Update with the path to your GDB parent directory
-nlcd_raster_path = r"C:\GIS\Data\LEARN\SourceData\LandCover\nlcd_2021_land_cover_l48_20210604.tif"  # Update with the path to your NLCD raster
-output_directory = r"C:\GIS\Data\LEARN\Disturbances\Output"  # Update with the path where you want to save outputs
+gdb_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS"  # Update with your GDB parent directory
+nlcd_raster_path = r"C:\GIS\Data\LEARN\SourceData\LandCover\nlcd_2021_land_cover_l48_20210604.tif"  # Update with your NLCD raster path
+output_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS\Processed\test"  # Update with your output directory
 
 # Ensure output directory exists
 os.makedirs(output_directory, exist_ok=True)

@@ -16,9 +16,9 @@ logging.basicConfig(
 logging.info('Insect and Disease Rasterization Script Started.')
 
 # Define paths
-gdb_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS_Raw\raw_gdbs"  # Update with your GDB parent directory
+gdb_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS"  # Update with your GDB parent directory
 nlcd_raster_path = r"C:\GIS\Data\LEARN\SourceData\LandCover\nlcd_2021_land_cover_l48_20210604.tif"  # Update with your NLCD raster path
-output_directory = r"C:\GIS\Data\LEARN\Disturbances\Output"  # Update with your output directory
+output_directory = r"C:\GIS\Data\LEARN\Disturbances\ADS\Processed"  # Update with your output directory
 
 # Ensure output directory exists
 os.makedirs(output_directory, exist_ok=True)
@@ -30,8 +30,7 @@ logging.info(f'Regions to process: {regions}')
 
 # Define NLCD time periods
 time_periods = {
-    '2016_2019': [2016, 2017, 2018, 2019],
-    '2019_2021': [2019, 2020, 2021],
+    '2021_2023': [2021, 2022, 2023],
 }
 logging.info('Time periods defined.')
 
