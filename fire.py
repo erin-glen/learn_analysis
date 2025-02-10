@@ -1,9 +1,16 @@
 # fire.py
 """
-Processes fire data from MTBS annual composites:
-1) Finds relevant yearly rasters
-2) Performs a CellStatistics MAX across those years
-3) Reclassifies final codes for each pixel
+Processes MTBS fire data in two stages:
+
+1) Year-by-Year Reclassification:
+   - For each unique year in the config's TIME_PERIODS, read raw MTBS raster
+     (mtbs_CONUS_{year}.tif), reclassify codes (1,2,5->3; 3,4->10; 6 or NoData->0),
+     and save output as fire_{year}_reclass.tif.
+
+2) Multi-Year Combination:
+   - For each time period in cfg.TIME_PERIODS, gather the reclassified rasters
+     for each year in that period, perform CellStatistics (MAX), and save
+     the final as fire_{period}.tif.
 """
 
 import arcpy
@@ -15,13 +22,13 @@ import disturbance_config as cfg
 
 def main():
     """
-    Builds a multi-year fire disturbance raster, reclassifying
-    severity codes to simplified values.
-    If the final raster for a given time period already exists,
-    the script logs a message and skips reprocessing.
+    Main driver for the new 2-step fire processing:
+      (A) Reclassify each unique year
+      (B) Combine reclassified rasters per time period
     """
-    logging.info("Starting fire.py...")
+    logging.info("Starting fire.py with Year-by-Year Reclassification + Period Combination.")
 
+    # Set up ArcPy environment
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.snapRaster = cfg.NLCD_RASTER
     arcpy.env.extent = cfg.NLCD_RASTER
@@ -29,38 +36,41 @@ def main():
     arcpy.env.outputCoordinateSystem = cfg.NLCD_RASTER
     arcpy.env.overwriteOutput = True
 
-    # Loop over each time_period in the config
-    for period_name, years in cfg.TIME_PERIODS.items():
-        out_final_raster = os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{period_name}.tif")
+    # ---------------------------------------------------------------
+    # A. Year-by-Year Reclassification
+    # ---------------------------------------------------------------
+    # Gather all unique years from the config's TIME_PERIODS
+    all_years = set()
+    for period_name, year_list in cfg.TIME_PERIODS.items():
+        all_years.update(year_list)
+    all_years = sorted(all_years)
 
-        # If this final output already exists, skip
-        if arcpy.Exists(out_final_raster):
-            logging.info(f"Fire raster for period '{period_name}' already exists => {out_final_raster}. Skipping.")
+    logging.info(f"Unique fire years found in config TIME_PERIODS: {all_years}")
+
+    for year in all_years:
+        # Paths
+        raw_tif = os.path.join(cfg.FIRE_ROOT, str(year), f"mtbs_CONUS_{year}", f"mtbs_CONUS_{year}.tif")
+        reclass_tif = os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{year}_reclass.tif")
+
+        # If reclass file exists, skip
+        if arcpy.Exists(reclass_tif):
+            logging.info(f"Year={year} reclassified file already exists => {reclass_tif}. Skipping reclassification.")
             continue
 
-        # Collect all MTBS yearly rasters for this period
-        ras_list = []
-        for yr in years:
-            in_tif = os.path.join(cfg.FIRE_ROOT, str(yr), f"mtbs_CONUS_{yr}", f"mtbs_CONUS_{yr}.tif")
-            if arcpy.Exists(in_tif):
-                logging.info(f"Found MTBS for year={yr}: {in_tif}")
-                ras_list.append(Raster(in_tif))
-            else:
-                logging.warning(f"MTBS year={yr} not found: {in_tif}")
-
-        if not ras_list:
-            logging.warning(f"No raw fire rasters found for period='{period_name}'. Skipping.")
+        # Check if raw input exists
+        if not arcpy.Exists(raw_tif):
+            logging.warning(f"Raw MTBS raster for year={year} not found => {raw_tif}. Skipping reclassification.")
             continue
 
-        logging.info(f"Combining {len(ras_list)} raw rasters via MAX => {out_final_raster}")
+        logging.info(f"Reclassifying raw MTBS => {reclass_tif}")
 
-        # 1) CellStatistics (MAX)
-        max_raw = CellStatistics(ras_list, "MAXIMUM", "DATA")  # ignore NoData => won't overshadow valid pixels
+        # 1) Load raw
+        raw_raster = Raster(raw_tif)
 
         # 2) Reclassify codes:
-        #    1,2,5 => 3
-        #    3,4 => 10
-        #    6 or NoData => 0
+        #    1,2,5 => 3 (Low severity),
+        #    3,4 => 10 (Mod/High),
+        #    6 or NoData => 0 (Unburned)
         reclass_map = RemapValue([
             [1, 3],
             [2, 3],
@@ -69,15 +79,49 @@ def main():
             [5, 3],
             [6, 0]
         ])
-        rc = Reclassify(max_raw, "Value", reclass_map, "NODATA")  # all else => NoData
-        final_fire = Con(IsNull(rc), 0, rc)                      # convert NoData => 0
+        rc_temp = Reclassify(raw_raster, "Value", reclass_map, "NODATA")
+        year_reclass = Con(IsNull(rc_temp), 0, rc_temp)
 
-        # 3) Save the final
-        final_fire.save(out_final_raster)
-        logging.info(f"Fire inventory reclassification => {out_final_raster}")
+        # 3) Save
+        year_reclass.save(reclass_tif)
+        logging.info(f"Year={year} reclassified fire saved => {reclass_tif}")
 
+    # ---------------------------------------------------------------
+    # B. Combine Reclassified Rasters Per Time Period
+    # ---------------------------------------------------------------
+    for period_name, year_list in cfg.TIME_PERIODS.items():
+        out_final_raster = os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{period_name}.tif")
+
+        # If final output exists, skip
+        if arcpy.Exists(out_final_raster):
+            logging.info(f"Multi-year fire raster for '{period_name}' already exists => {out_final_raster}. Skipping.")
+            continue
+
+        # Collect reclassified rasters for each year in this period
+        reclass_paths = []
+        for year in year_list:
+            reclass_tif = os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{year}_reclass.tif")
+            if arcpy.Exists(reclass_tif):
+                reclass_paths.append(reclass_tif)
+            else:
+                logging.warning(f"No reclass file found for year={year}, skipping it.")
+
+        if not reclass_paths:
+            logging.warning(f"No reclassified rasters found for period='{period_name}'. Skipping.")
+            continue
+
+        # Perform CellStatistics (MAX) to combine
+        logging.info(f"Combining {len(reclass_paths)} yearly reclassified rasters with MAX => {out_final_raster}")
+        ras_objs = [Raster(p) for p in reclass_paths]
+        combined_max = CellStatistics(ras_objs, "MAXIMUM", "DATA")
+
+        # Save final
+        combined_max.save(out_final_raster)
+        logging.info(f"Final multi-year fire raster saved => {out_final_raster}")
+
+    # Cleanup
     arcpy.CheckInExtension("Spatial")
-    logging.info("Fire processing completed successfully.")
+    logging.info("Fire processing (yearly reclassification + period combination) completed successfully.")
 
 
 if __name__ == "__main__":
