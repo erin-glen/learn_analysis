@@ -55,7 +55,7 @@ NLCD_RASTER = r"C:\GIS\Data\LEARN\SourceData\LandCover\nlcd_2021_land_cover_l48_
 # --------------------------------------------------------------------
 # REGIONS & TIME PERIODS
 # --------------------------------------------------------------------
-REGIONS = [1, 2, 3, 4, 5, 6, 8, 9]
+REGIONS = [1, 2, 3, 4, 6, 8, 9]
 
 # Example time periods, as a dict of "name" -> [year1, year2, year3, ...]
 TIME_PERIODS = {

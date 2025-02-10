@@ -13,7 +13,8 @@ import disturbance_config as cfg
 
 def main():
     """
-    Mosaics all region-level insect/disease rasters (one mosaic per time period).
+    Mosaics all region-level insect/disease rasters (one mosaic per time period),
+    skipping if the final mosaic output already exists.
     """
     logging.info("Starting insect_disease_merge...")
 
@@ -27,8 +28,14 @@ def main():
     arcpy.env.outputCoordinateSystem = cfg.NLCD_RASTER
 
     for period in cfg.TIME_PERIODS.keys():
+        # Final mosaic for this time period
         out_name = f"insect_damage_{period}.tif"
         out_path = os.path.join(cfg.INSECT_FINAL_DIR, out_name)
+
+        # Check if the final mosaic already exists
+        if arcpy.Exists(out_path):
+            logging.info(f"Final mosaic for '{period}' already exists => {out_path}. Skipping merge.")
+            continue
 
         # Collect the region rasters
         region_rasters = []
@@ -40,12 +47,12 @@ def main():
                 logging.warning(f"Missing insect raster for region={reg}, period={period}")
 
         if not region_rasters:
-            logging.warning(f"No insect/disease region rasters found for {period}, skipping.")
+            logging.warning(f"No insect/disease region rasters found for '{period}', skipping.")
             continue
 
         logging.info(f"Merging {len(region_rasters)} region rasters => {out_path}")
 
-        # Mosaic method="MAXIMUM" so that 5 overrides 0 if there's overlap
+        # Mosaic method="MAXIMUM" => 5 overrides 0 if there's overlap
         arcpy.management.MosaicToNewRaster(
             input_rasters=region_rasters,
             output_location=cfg.INSECT_FINAL_DIR,

@@ -17,7 +17,8 @@ def main():
     """
     Creates a single Hansen mosaic, reprojects it to match NLCD,
     then for each time period, extracts disturbance (1) vs no-disturbance (0).
-    Steps 1 & 2 are only done if the relevant outputs do not already exist.
+    Steps 1 & 2 are only done if the relevant outputs do not already exist,
+    and each period's extraction step is skipped if that output already exists.
     """
     logging.info("Starting harvest_other.py (Hansen-based harvest/other).")
 
@@ -74,11 +75,13 @@ def main():
     h = Raster(hansen_mosaic_reproj)
     for period_name, years in cfg.TIME_PERIODS.items():
         out_raster = os.path.join(cfg.HANSEN_OUTPUT_DIR, f"hansen_{period_name}.tif")
+
+        # Check if output for this period already exists
         if arcpy.Exists(out_raster):
-            logging.info(f"Harvest raster for {period_name} already exists => {out_raster}. Skipping extraction.")
+            logging.info(f"Harvest raster for '{period_name}' already exists => {out_raster}. Skipping extraction.")
             continue
 
-        logging.info(f"  -> {period_name} => {out_raster}")
+        logging.info(f"  -> Creating harvest raster for '{period_name}' => {out_raster}")
 
         # If years = [2021,2022,2023], Hansen codes => (year - 2001)+1
         low_val = (min(years) - 2001) + 1
@@ -88,6 +91,8 @@ def main():
         cond = (h >= low_val) & (h <= high_val)
         out_period = Con(cond, 1, 0)
         out_period.save(out_raster)
+
+        logging.info(f"Harvest raster saved => {out_raster}")
 
     # Cleanup
     arcpy.CheckInExtension("Spatial")
