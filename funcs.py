@@ -814,6 +814,7 @@ def calculate_area(
             else:
                 area = landuse_df.loc[landuse_df["Category"] == key, "Hectares"].sum()
             return int(area)
+
     elif category == "Forest Remaining Forest":
         columns_mapping = {
             "Undisturbed": "undisturbed_HA",
@@ -823,8 +824,11 @@ def calculate_area(
         }
         column = columns_mapping.get(type_)
         if column:
-            area = forest_type_df.loc[forest_type_df["Category"] == "Forest Remaining Forest", column].sum()
+            # Include both 'Forest Remaining Forest' and 'Forest Remaining Forest (fire)'
+            subset = forest_type_df["Category"].isin(["Forest Remaining Forest", "Forest Remaining Forest (fire)"])
+            area = forest_type_df.loc[subset, column].sum()
             return int(area)
+
     elif category == "Trees Outside Forest":
         if type_ == "Tree canopy loss" and "TreeCanopyLoss_HA" in landuse_df.columns:
             area = landuse_df.loc[
@@ -878,15 +882,12 @@ def calculate_ghg_flux(
         }
         key = mapping.get(type_)
         if key:
-            # For "Reforestation", we get annual removals from forest_type_df
             if type_ == "Reforestation (Non-Forest to Forest)":
                 ghg = forest_type_df.loc[
                     forest_type_df["Category"] == key,
                     "Annual_Removals_N_to_F_CO2"
                 ].sum()
             else:
-                # For forest-to-nonforest, use the new annual column name
-                # e.g., "Annual Emissions Forest to Non Forest CO2"
                 ghg = landuse_df.loc[
                     landuse_df["Category"] == key,
                     "Annual Emissions Forest to Non Forest CO2"
@@ -902,15 +903,12 @@ def calculate_ghg_flux(
         }
         column = columns_mapping.get(type_)
         if column:
-            ghg = forest_type_df.loc[
-                forest_type_df["Category"] == "Forest Remaining Forest",
-                column
-            ].sum()
+            # Include both 'Forest Remaining Forest' and 'Forest Remaining Forest (fire)'
+            subset = forest_type_df["Category"].isin(["Forest Remaining Forest", "Forest Remaining Forest (fire)"])
+            ghg = forest_type_df.loc[subset, column].sum()
             return int(ghg)
 
     elif category == "Trees Outside Forest":
-        # For "Tree canopy loss" or "Canopy maintained/gained",
-        # we do the same approach as before, potentially dividing or not by `years`.
         if type_ == "Tree canopy loss" and "TreeCanopyLoss_HA" in landuse_df.columns:
             if emissions_factor is None:
                 raise ValueError("Emissions factor is required for tree canopy loss emissions calculation.")

@@ -179,6 +179,11 @@ def main():
     tree_canopy_source = input("Select Tree Canopy source (NLCD, CBW, Local): ").strip()
     assert tree_canopy_source in ["NLCD", "CBW", "Local"], f"{tree_canopy_source} is not valid."
 
+    # ---- NEW PROMPT for recategorize mode ----
+    recat_response = input("Enable recategorization mode? (y/n): ").strip().lower()
+    recategorize_mode = (recat_response == 'y')
+    # ------------------------------------------
+
     # 2) Build Input Config
     input_config = get_input_config(year1, year2, aoi_name, tree_canopy_source)
     input_config["cell_size"] = CELL_SIZE
@@ -194,8 +199,8 @@ def main():
     start_time = dt.now()
 
     # 3) Output folder with consistent timestamp
-    timestamp = start_time.strftime("%Y%m%d_%H%M%S")  # e.g. "20250125_135309"
-    output_folder_name = f"{year1}_{year2}_{aoi_name}_{timestamp}"  # e.g. "2013_2016_Montgomery_20250125_135309"
+    timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+    output_folder_name = f"{year1}_{year2}_{aoi_name}_{timestamp}"
     output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
 
@@ -204,34 +209,21 @@ def main():
         cf.write(str(input_config))
 
     # 4) Perform analysis
+    # ---- PASS recategorize_mode to perform_analysis ----
     landuse_result, forest_type_result = perform_analysis(
         input_config,
         CELL_SIZE,
         int(year1),
         int(year2),
         analysis_type='community',
-        tree_canopy_source=tree_canopy_source
+        tree_canopy_source=tree_canopy_source,
+        recategorize_mode=recategorize_mode
     )
+    # ----------------------------------------------------
 
     if landuse_result is None or forest_type_result is None:
         arcpy.AddError("Analysis failed.")
         return
-
-    # --- Rounding numeric columns before writing raw CSV outputs ---
-    landuse_numeric_cols = [
-        "Hectares", "CellCount",
-        "carbon_ag_bg_us", "carbon_sd_dd_lt", "carbon_so",
-        "fire_HA", "harvest_HA", "insect_damage_HA",
-        "TreeCanopy_HA", "TreeCanopyLoss_HA",
-        "Annual Emissions Forest to Non Forest CO2",
-    ]
-    forest_type_numeric_cols = [
-        "Hectares", "fire_HA", "harvest_HA", "insect_damage_HA", "undisturbed_HA",
-        "Annual_Removals_Undisturbed_CO2", "Annual_Removals_N_to_F_CO2",
-        "Annual_Emissions_Fire_CO2", "Annual_Emissions_Harvest_CO2", "Annual_Emissions_Insect_CO2"
-    ]
-    landuse_result = round_results_df(landuse_result, landuse_numeric_cols)
-    forest_type_result = round_results_df(forest_type_result, forest_type_numeric_cols)
     # --------------------------------------------------------------------
 
     # Save raw DataFrames with the same timestamp

@@ -1,4 +1,5 @@
-#analysis_core
+# analysis_core.py
+
 import arcpy
 import pandas as pd
 from funcs import (
@@ -19,13 +20,13 @@ from lookups import nlcdParentRollupCategories
 
 
 def perform_analysis(
-        input_config: dict,
-        cell_size: int,
-        year1: int,
-        year2: int,
-        analysis_type: str = 'community',
-        tree_canopy_source: str = None,
-        recategorize_mode: bool = False
+    input_config: dict,
+    cell_size: int,
+    year1: int,
+    year2: int,
+    analysis_type: str = "community",
+    tree_canopy_source: str = None,
+    recategorize_mode: bool = False
 ) -> tuple:
     """
     Performs the land use change analysis, returning two DataFrames:
@@ -69,12 +70,12 @@ def perform_analysis(
         arcpy.env.overwriteOutput = True
         arcpy.env.extent = arcpy.Describe(aoi).extent
 
-        # Create stratification raster
+        # STEP 1: Create stratification raster
         arcpy.AddMessage("STEP 1: Creating land use stratification raster for all classes of land use")
         strat_raster = create_landuse_stratification_raster(nlcd_1, nlcd_2, aoi)
 
-        # Calculate tree canopy (community analysis only)
-        if analysis_type == 'community' and tree_canopy_1 and tree_canopy_2:
+        # STEP 2: Calculate tree canopy (community analysis only)
+        if analysis_type == "community" and tree_canopy_1 and tree_canopy_2:
             arcpy.AddMessage("STEP 2: Summing up the tree canopy average & difference by stratification class")
             tree_cover = calculate_tree_canopy(
                 tree_canopy_1, tree_canopy_2, strat_raster, tree_canopy_source, aoi, cell_size
@@ -85,16 +86,16 @@ def perform_analysis(
         else:
             tree_cover = None
 
-        # Compute disturbances
+        # STEP 3: Compute disturbances
         arcpy.AddMessage("STEP 3: Cross-tabulating disturbance area by stratification class")
         arcpy.AddMessage(f"Number of disturbance rasters: {len(disturbance_rasters)}")
         disturbance_wide, disturb_raster = compute_disturbance_max(disturbance_rasters, strat_raster)
 
-        # Compute carbon sums
+        # STEP 4: Compute carbon sums
         arcpy.AddMessage("STEP 4: Zonal statistics sum for carbon rasters by stratification class")
         carbon_df = zonal_sum_carbon(strat_raster, carbon_ag_bg_us, carbon_sd_dd_lt, carbon_so)
 
-        # Merge dataframes
+        # Merge dataframes (carbon, disturbances, and optional tree canopy)
         dfs_to_merge = [carbon_df, disturbance_wide]
         if tree_cover is not None:
             dfs_to_merge.append(tree_cover)
@@ -110,51 +111,62 @@ def perform_analysis(
         # Determine land-use change category
         landuse_df["Category"] = landuse_df.apply(determine_landuse_category, axis=1)
 
-        # Optional recategorize step (disturbances)
-        if recategorize_mode:
-            recat_conditions = (
-                (landuse_df["Category"] == "Forest to Grassland") &
-                (
-                    (landuse_df["fire_HA"] > 0) |
-                    (landuse_df["insect_damage_HA"] > 0) |
-                    (landuse_df["harvest_HA"] > 0)
-                )
-            )
-            recategorize_count = recat_conditions.sum()
-            if recategorize_count > 0:
-                arcpy.AddMessage(
-                    f"Recategorizing {recategorize_count} records from 'Forest to Grassland' -> 'Forest Remaining Forest'."
-                )
-                landuse_df.loc[recat_conditions, "Category"] = "Forest Remaining Forest"
-            else:
-                arcpy.AddMessage("No records met the recategorization criteria.")
+        # We DO NOT re-categorize landuse_df for big disturbances. Keep NLCD transitions as-is.
 
-        # Make forest-to-nonforest emissions ANNUAL instead of total
+        # STEP 4.5: Make forest-to-nonforest emissions annual
         years_diff = year2 - year1
-
-        # Instead of "Total Emissions Forest to Non Forest CO2", we name it "Annual Emissions ..."
         landuse_df["Annual Emissions Forest to Non Forest CO2"] = landuse_df.apply(
             lambda row: calculate_forest_to_nonforest_emissions(row, years_diff),
             axis=1
         )
 
-        # Step 5: Tabulate forest age areas
+        # STEP 5: Tabulate forest age
         arcpy.AddMessage("STEP 5: Tabulating total area for the forest age types by stratification class")
         forest_age_df = tabulate_area_by_stratification(
             strat_raster, forest_age_raster, output_name="ForestAgeTypeRegion"
         )
 
-        # Step 6: Disturbances by forest age
+        # STEP 6: Disturbances by forest age
         arcpy.AddMessage("STEP 6: Tabulating disturbance area for forest age types")
         forest_age_df = calculate_disturbances(disturb_raster, strat_raster, forest_age_raster, forest_age_df)
 
-        # Step 7: Fill NA, merge factors, calculate annual flux
+        # STEP 7: Fill NA, merge factors
         arcpy.AddMessage("STEP 7: Calculating annual emissions from disturbances and annual removals")
         forest_age_df = fill_na_values(forest_age_df)
+
+        # --- NEW recategorize step for forest_age_df if user sets recategorize_mode ---
+        if recategorize_mode:
+            # We only recategorize "Forest to Grassland" + fire into "Forest Remaining Forest (fire)"
+            recat_fire = (
+                (forest_age_df["Category"] == "Forest to Grassland")
+                & (forest_age_df["fire_HA"] > 0)
+            )
+            recategorize_count = recat_fire.sum()
+            if recategorize_count > 0:
+                arcpy.AddMessage(
+                    f"Recategorizing {recategorize_count} records from "
+                    f"'Forest to Grassland' -> 'Forest Remaining Forest (fire)' in forest_age_df."
+                )
+                # Change category name
+                forest_age_df.loc[recat_fire, "Category"] = "Forest Remaining Forest (fire)"
+
+                # Zero out other disturbances, if any
+                if "insect_damage_HA" in forest_age_df.columns:
+                    forest_age_df.loc[recat_fire, "insect_damage_HA"] = 0
+                if "harvest_HA" in forest_age_df.columns:
+                    forest_age_df.loc[recat_fire, "harvest_HA"] = 0
+                if "undisturbed_HA" in forest_age_df.columns:
+                    forest_age_df.loc[recat_fire, "undisturbed_HA"] = 0
+
+            else:
+                arcpy.AddMessage("No 'Forest to Grassland' + fire records to recategorize in forest_age_df.")
+
+        # Now finish the merges and final emissions calculations
         forest_age_df = merge_age_factors(forest_age_df, forest_lookup_csv)
         forest_age_df = calculate_forest_removals_and_emissions(forest_age_df, year1, year2)
         # Note: 'calculate_forest_removals_and_emissions' already divides by years_diff for disturbances
 
+        # Return final dataframes
         return (
             landuse_df.sort_values(by=["Hectares"], ascending=False),
             forest_age_df.sort_values(by=["Hectares"], ascending=False),
