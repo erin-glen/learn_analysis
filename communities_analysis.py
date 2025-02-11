@@ -1,3 +1,5 @@
+# communities_analysis.py
+
 import os
 from datetime import datetime as dt
 import arcpy
@@ -31,6 +33,7 @@ def split_emissions_removals(ghg_df: pd.DataFrame) -> pd.DataFrame:
     if "Emissions/Removals" not in ghg_df.columns or "GHG Flux (t CO2e/year)" not in ghg_df.columns:
         return ghg_df
 
+    # Create new numeric columns
     ghg_df["Emissions"] = 0.0
     ghg_df["Removals"] = 0.0
 
@@ -59,29 +62,21 @@ def create_ipcc_summary(ghg_df: pd.DataFrame) -> pd.DataFrame:
             return "Trees outside forests"
         return "Other"
 
-    # 1) Map IPCC category
     ghg_df["IPCC_Category"] = ghg_df.apply(map_ipcc_category, axis=1)
-
-    # 2) Group by IPCC_Category and sum up "GHG Flux (t CO2e/year)"
     summary = (
         ghg_df.groupby("IPCC_Category")["GHG Flux (t CO2e/year)"]
               .sum()
               .reset_index()
               .rename(columns={"GHG Flux (t CO2e/year)": "Net Flux (t CO2e/yr)"})
     )
-
-    # 3) Add a "Total" row
     total_flux = summary["Net Flux (t CO2e/yr)"].sum()
     summary = pd.concat([
         summary,
         pd.DataFrame({"IPCC_Category": ["Total"], "Net Flux (t CO2e/yr)": [total_flux]})
     ], ignore_index=True)
 
-    # 4) Rename the IPCC_Category column to "Category"
     summary.rename(columns={"IPCC_Category": "Category"}, inplace=True)
-
     return summary
-
 
 def dataframe_as_csv_string(df: pd.DataFrame, index: bool = False) -> str:
     """
@@ -106,6 +101,7 @@ def add_total_row_ghg(ghg_df: pd.DataFrame) -> pd.DataFrame:
         "Area (ha, total)": "N/A",
         "Removals": sum_removals,
         "Emissions": sum_emissions,
+        # We'll drop "GHG Flux" etc. columns later if not needed
     }
 
     return pd.concat([ghg_df, pd.DataFrame([total_row])], ignore_index=True)
@@ -121,11 +117,13 @@ def write_enhanced_summary_csv(
 ):
     """
     Write 4 major tables to a single CSV, each separated by *5* blank lines:
-      1) Land Use Change Matrix
+      1) Land Use Change Matrix (hectares)
+         - Next line: "<year2>: Across\n<year1>: Down"
       2) Tree Canopy Summary
       3) GHG Inventory (with separate Emissions & Removals)
-      4) IPCC Summary
+      4) Simplified report: IPCC categories
     """
+    # 1) Land Use Change Matrix
     if landuse_matrix.index.name is not None:
         landuse_matrix.reset_index(inplace=True)
 
@@ -134,33 +132,43 @@ def write_enhanced_summary_csv(
         landuse_matrix.rename(columns={"NLCD1_class": ""}, inplace=True)
     landuse_matrix.columns.name = None
 
+    # 2) Tree Canopy Summary
     tree_canopy_summary.reset_index(drop=True, inplace=True)
+
+    # 3) GHG Inventory
     ghg_inventory.reset_index(drop=True, inplace=True)
     ghg_inventory = add_total_row_ghg(ghg_inventory)
+    # Drop columns you don't want to show
     cols_to_drop = ["GHG Flux (t CO2e/year)", "IPCC_Category", "Factor (t C/ha for emissions, t C/ha/yr for removals)"]
     ghg_inventory.drop(columns=cols_to_drop, inplace=True, errors="ignore")
+
+    # 4) IPCC Summary
     ipcc_summary.reset_index(drop=True, inplace=True)
 
     with open(output_csv_path, "w", encoding="utf-8", newline='') as f:
+        # Land Use Change Matrix
         f.write("Land Use Change Matrix (hectares)\n")
         f.write(col_title + "\n")
         f.write(dataframe_as_csv_string(landuse_matrix, index=False))
         f.write("\n" * 5)
 
+        # Tree Canopy Summary
         f.write("Tree Canopy Summary\n")
         f.write(dataframe_as_csv_string(tree_canopy_summary, index=False))
         f.write("\n" * 5)
 
+        # GHG Inventory
         f.write("GHG Inventory with separated emissions and removals (t CO2e/yr)\n")
         f.write(dataframe_as_csv_string(ghg_inventory, index=False))
         f.write("\n" * 5)
 
+        # IPCC Summary
         f.write("Simplified report: IPCC categories\n")
         f.write(dataframe_as_csv_string(ipcc_summary, index=False))
         f.write("\n" * 5)
 
-
 def main():
+    # 1) User Inputs
     year1 = input("Enter Year 1: ").strip()
     assert year1 in VALID_YEARS, f"{year1} is not a valid year."
 
@@ -171,9 +179,7 @@ def main():
     tree_canopy_source = input("Select Tree Canopy source (NLCD, CBW, Local): ").strip()
     assert tree_canopy_source in ["NLCD", "CBW", "Local"], f"{tree_canopy_source} is not valid."
 
-    recategorize_input = input("Enable recategorization mode? (y/n): ").strip().lower()
-    recategorize_mode = recategorize_input.startswith('y')
-
+    # 2) Build Input Config
     input_config = get_input_config(year1, year2, aoi_name, tree_canopy_source)
     input_config["cell_size"] = CELL_SIZE
     input_config["year1"] = int(year1)
@@ -186,28 +192,32 @@ def main():
         raise ValueError("Emissions factor and removals factor must be provided.")
 
     start_time = dt.now()
-    timestamp = start_time.strftime("%Y%m%d_%H%M%S")
-    output_folder_name = f"{year1}_{year2}_{aoi_name}_{timestamp}"
+
+    # 3) Output folder with consistent timestamp
+    timestamp = start_time.strftime("%Y%m%d_%H%M%S")  # e.g. "20250125_135309"
+    output_folder_name = f"{year1}_{year2}_{aoi_name}_{timestamp}"  # e.g. "2013_2016_Montgomery_20250125_135309"
     output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
 
+    # Save config
     with open(os.path.join(output_path, "config.txt"), "w") as cf:
         cf.write(str(input_config))
 
+    # 4) Perform analysis
     landuse_result, forest_type_result = perform_analysis(
         input_config,
         CELL_SIZE,
         int(year1),
         int(year2),
         analysis_type='community',
-        tree_canopy_source=tree_canopy_source,
-        recategorize_mode=recategorize_mode
+        tree_canopy_source=tree_canopy_source
     )
 
     if landuse_result is None or forest_type_result is None:
         arcpy.AddError("Analysis failed.")
         return
 
+    # --- Rounding numeric columns before writing raw CSV outputs ---
     landuse_numeric_cols = [
         "Hectares", "CellCount",
         "carbon_ag_bg_us", "carbon_sd_dd_lt", "carbon_so",
@@ -222,12 +232,15 @@ def main():
     ]
     landuse_result = round_results_df(landuse_result, landuse_numeric_cols)
     forest_type_result = round_results_df(forest_type_result, forest_type_numeric_cols)
+    # --------------------------------------------------------------------
 
+    # Save raw DataFrames with the same timestamp
     landuse_csv = os.path.join(output_path, f"landuse_result_{timestamp}.csv")
     forest_type_csv = os.path.join(output_path, f"forest_type_result_{timestamp}.csv")
     landuse_result.to_csv(landuse_csv, index=False)
     forest_type_result.to_csv(forest_type_csv, index=False)
 
+    # 5) Summaries
     years_diff = int(year2) - int(year1)
     landuse_matrix = create_land_cover_transition_matrix(landuse_result)
     tree_canopy_df = summarize_tree_canopy(landuse_result)
@@ -243,6 +256,7 @@ def main():
     ghg_df = split_emissions_removals(ghg_df)
     ipcc_df = create_ipcc_summary(ghg_df)
 
+    # 6) Final Summary CSV named "summary_{timestamp}.csv"
     summary_csv = os.path.join(output_path, f"summary_{timestamp}.csv")
     write_enhanced_summary_csv(
         summary_csv,
