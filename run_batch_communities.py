@@ -1,3 +1,5 @@
+# run_batch_communities.py
+
 import os
 import arcpy
 import pandas as pd
@@ -15,7 +17,6 @@ from communities_analysis import (
     create_ipcc_summary,
     write_enhanced_summary_csv,
 )
-
 
 #####################
 # HELPER FUNCTIONS  #
@@ -159,12 +160,13 @@ def build_inventory_rows(ghg_df: pd.DataFrame, feature_id: str, year_range: str)
 
 
 def process_feature(
-        feature_id,
-        geometry,
-        year1,
-        year2,
-        tree_canopy_source,
-        output_base_folder
+    feature_id,
+    geometry,
+    year1,
+    year2,
+    tree_canopy_source,
+    output_base_folder,
+    recategorize_mode=False  # <-- add a toggle for recategorization
 ) -> dict:
     """
     Process one feature geometry: run the communities analysis,
@@ -182,15 +184,19 @@ def process_feature(
         input_config["year2"] = year2
         input_config["aoi"] = aoi_temp
 
-        # --- NEW: If missing emission/removal factors, pull from shapefiles ---
+        # If missing emission/removal factors, pull from shapefiles
         if "removals_factor" not in input_config or input_config["removals_factor"] is None:
-            (rem_factor, used_state) = get_removal_factor_by_state(aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp")
+            (rem_factor, used_state) = get_removal_factor_by_state(
+                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp"
+            )
             input_config["removals_factor"] = rem_factor
         else:
             used_state = "ConfigProvided"
 
         if "emissions_factor" not in input_config or input_config["emissions_factor"] is None:
-            (em_factor, used_place) = get_emission_factor_by_nearest_place(aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\place_emission_factors.shp")
+            (em_factor, used_place) = get_emission_factor_by_nearest_place(
+                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\place_emission_factors.shp"
+            )
             input_config["emissions_factor"] = em_factor
         else:
             used_place = "ConfigProvided"
@@ -200,7 +206,7 @@ def process_feature(
             f"TOF EmFactor={input_config['emissions_factor']} from {used_place}."
         )
 
-        # --- Perform analysis with recategorize_mode enabled ---
+        # Now call perform_analysis with the chosen recategorize_mode
         landuse_result, forest_type_result = perform_analysis(
             input_config,
             CELL_SIZE,
@@ -208,7 +214,7 @@ def process_feature(
             year2,
             analysis_type='community',
             tree_canopy_source=tree_canopy_source,
-            recategorize_mode=False  # Enable recategorize option here
+            recategorize_mode=recategorize_mode
         )
         if landuse_result is None or forest_type_result is None:
             arcpy.AddWarning(f"Analysis returned None for feature={feature_id}.")
@@ -279,12 +285,13 @@ def process_feature(
 
 
 def run_batch_for_scale(
-        shapefile: str,
-        id_field: str,
-        inventory_periods: list,
-        tree_canopy_source: str,
-        scale_name: str,
-        date_str: str
+    shapefile: str,
+    id_field: str,
+    inventory_periods: list,
+    tree_canopy_source: str,
+    scale_name: str,
+    date_str: str,
+    recategorize_mode=False  # <-- add a toggle for recategorization at the scale level
 ):
     """
     For the given shapefile (scale):
@@ -313,13 +320,15 @@ def run_batch_for_scale(
                 geometry = row[1]
                 arcpy.AddMessage(f"  -> FeatureID={feature_id}, {year1}-{year2}")
 
+                # Now we pass the recategorize_mode to process_feature
                 result_data = process_feature(
                     feature_id=feature_id,
                     geometry=geometry,
                     year1=year1,
                     year2=year2,
                     tree_canopy_source=tree_canopy_source,
-                    output_base_folder=scale_folder
+                    output_base_folder=scale_folder,
+                    recategorize_mode=recategorize_mode
                 )
                 if not result_data:
                     continue
@@ -352,12 +361,14 @@ def main():
     Batch script for communities_analysis that:
       - For each scale & inventory period & feature, sets up emission/removal factors
         from shapefiles if not already provided
-      - Runs the normal "communities_analysis" for each feature
+      - Runs the normal "perform_analysis" for each feature
       - Summarizes results in master flux/inventory CSVs
     """
+    # Example inventory periods
     inventory_periods = [(2011,2013),(2013,2016),(2016,2019),(2019,2021)]
 
     scales_info = [
+        # Example scales (commented out unless you un-comment them)
         # {
         #     "scale_name": "az_counties",
         #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
@@ -384,6 +395,10 @@ def main():
         }
     ]
 
+    # Decide if you want to recategorize "Forest to Grassland" w/ disturbances => "Forest Remaining Forest"
+    # This is a global toggle, used for all features in all scales below
+    enable_recategorization = True
+
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
 
@@ -400,11 +415,11 @@ def main():
             inventory_periods=inventory_periods,
             tree_canopy_source=tree_canopy_source,
             scale_name=scale_name,
-            date_str=date_str
+            date_str=date_str,
+            recategorize_mode=enable_recategorization  # pass to run_batch_for_scale
         )
 
     arcpy.AddMessage(f"\nAll scales complete. Total processing time: {dt.now() - start_time}")
-
 
 if __name__ == "__main__":
     main()
