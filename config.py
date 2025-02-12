@@ -36,8 +36,8 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Define default emissions and removals factors
     default_config = {
-        'emissions_factor': 103,      # Default emissions factor (tC/ha)
-        'removals_factor': -3.53,     # Default removals factor (tC/ha/yr)
+        'emissions_factor': 56.1,      # Default emissions factor (tC/ha)
+        'removals_factor': -3.88,     # Default removals factor (tC/ha/yr)
         'c_to_co2': 44 / 12,
     }
 
@@ -107,20 +107,11 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
             # canopy to 2019/2021
             # ─────────────────────────────────────────────────────────────────
             if (year1 == 2021 and year2 == 2023):
-                input_config["tree_canopy_1"] = os.path.join(
-                    tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif"
-                )
-                input_config["tree_canopy_2"] = os.path.join(
-                    tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
-                )
+                input_config["tree_canopy_1"] = os.path.join(tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif")
+                input_config["tree_canopy_2"] = os.path.join(tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif")
             else:
-                # Normal approach: match canopy to year1/year2
-                input_config["tree_canopy_1"] = os.path.join(
-                    tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
-                )
-                input_config["tree_canopy_2"] = os.path.join(
-                    tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif"
-                )
+                input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif")
+                input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif")
             # ─────────────────────────────────────────────────────────────────
 
         elif tree_canopy_source == "CBW":
@@ -152,7 +143,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
         {"name": "disturbance_1316.tif", "start_year": 2013, "end_year": 2016},
         {"name": "disturbance_1619.tif", "start_year": 2016, "end_year": 2019},
         {"name": "disturbance_1921.tif", "start_year": 2019, "end_year": 2021},
-        {"name": "disturbance_2131.tif", "start_year": 2021, "end_year": 2023},
+        {"name": "disturbance_2123.tif", "start_year": 2021, "end_year": 2023},
     ]
 
     # Pick disturbance rasters fully inside the analysis period
