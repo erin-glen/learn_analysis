@@ -36,8 +36,8 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Define default emissions and removals factors
     default_config = {
-        'emissions_factor': 103,      # Default emissions factor (tC/ha)
-        'removals_factor': -3.53,     # Default removals factor (tC/ha/yr)
+        'emissions_factor': 56.1,      # Default emissions factor (tC/ha)
+        'removals_factor': -3.88,     # Default removals factor (tC/ha/yr)
         'c_to_co2': 44 / 12,
     }
 
