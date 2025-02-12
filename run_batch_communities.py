@@ -397,7 +397,7 @@ def main():
 
     # Decide if you want to recategorize "Forest to Grassland" w/ disturbances => "Forest Remaining Forest"
     # This is a global toggle, used for all features in all scales below
-    enable_recategorization = False
+    enable_recategorization = True
 
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
