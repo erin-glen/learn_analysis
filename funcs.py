@@ -932,6 +932,9 @@ def calculate_ghg_flux(
     return 0
 
 
+import logging
+logger = logging.getLogger("CommunityAnalysisLogger")
+
 def summarize_ghg(
     landuse_df: pd.DataFrame,
     forest_type_df: pd.DataFrame,
@@ -944,18 +947,18 @@ def summarize_ghg(
     """
     Summarize GHG emissions and removals.
 
-    Args:
-        landuse_df (pd.DataFrame): Land use DataFrame.
-        forest_type_df (pd.DataFrame): Forest type DataFrame.
-        years (int): Number of years between observations.
-        emissions_factor (float, optional): Emission factor for trees outside forests.
-        removals_factor (float, optional): Removal factor for trees outside forests.
-        c_to_co2 (float, optional): Conversion factor from carbon to CO2.
-        include_trees_outside_forest (bool, optional): Whether to include 'Trees Outside Forest' categories.
-
     Returns:
-        pd.DataFrame: Summary DataFrame.
+        pd.DataFrame or None: A summary DataFrame, or None if an error occurs.
     """
+    # Basic checks
+    if landuse_df is None or forest_type_df is None:
+        logger.error("summarize_ghg called with a None DataFrame.")
+        return None
+    if landuse_df.empty:
+        logger.warning("landuse_df is empty. No GHG summary can be computed.")
+    if forest_type_df.empty:
+        logger.warning("forest_type_df is empty. No GHG summary can be computed.")
+
     categories = [
         ("Forest Change", "To Cropland", "Emissions"),
         ("Forest Change", "To Grassland", "Emissions"),
@@ -976,31 +979,40 @@ def summarize_ghg(
         ])
 
     results = []
-    for category, type_, emissions_removals in categories:
-        area = calculate_area(category, type_, landuse_df, forest_type_df)
-        ghg_flux = calculate_ghg_flux(
-            category,
-            type_,
-            landuse_df,
-            forest_type_df,
-            years,
-            emissions_factor=emissions_factor,
-            removals_factor=removals_factor,
-            c_to_co2=c_to_co2,
-        )
-        results.append(
-            {
-                "Category": category,
-                "Type": type_,
-                "Emissions/Removals": emissions_removals,
-                "Area (ha, total)": area,
-                "GHG Flux (t CO2e/year)": ghg_flux,
-            }
-        )
 
-    summary_df = pd.DataFrame(results)
+    try:
+        for category, type_, emissions_removals in categories:
+            # calculate_area, calculate_ghg_flux presumably come from your code
+            area = calculate_area(category, type_, landuse_df, forest_type_df)
+            ghg_flux = calculate_ghg_flux(
+                category,
+                type_,
+                landuse_df,
+                forest_type_df,
+                years,
+                emissions_factor=emissions_factor,
+                removals_factor=removals_factor,
+                c_to_co2=c_to_co2,
+            )
+            logger.debug(f"[summarize_ghg] category={category}, type={type_}, area={area}, flux={ghg_flux}")
+            results.append(
+                {
+                    "Category": category,
+                    "Type": type_,
+                    "Emissions/Removals": emissions_removals,
+                    "Area (ha, total)": area,
+                    "GHG Flux (t CO2e/year)": ghg_flux,
+                }
+            )
 
-    return summary_df
+        summary_df = pd.DataFrame(results)
+
+        logger.info(f"summarize_ghg produced {len(summary_df)} rows.")
+        return summary_df
+
+    except Exception as ex:
+        logger.error("Error inside summarize_ghg", exc_info=True)
+        return None
 
 
 
