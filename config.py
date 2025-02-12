@@ -44,8 +44,8 @@ aoi_specific_factors = {
 #   - TOF_REMOVALS_SHP:   for state-level removals factor
 #   - TOF_EMISSIONS_SHP:  for county-level emissions factor
 # ─────────────────────────────────────────────────────────────────────────────
-TOF_REMOVALS_SHP = os.path.join(DATA_FOLDER, "TOF_removals_by_state.shp")
-TOF_EMISSIONS_SHP = os.path.join(DATA_FOLDER, "TOF_emissions_by_county.shp")
+TOF_REMOVALS_SHP = r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp"
+TOF_EMISSIONS_SHP = r"C:\GIS\Data\LEARN\SourceData\TOF\az_county_emission_factors.shp"
 
 
 def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
@@ -98,7 +98,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
                 config['removals_factor'] = _get_average_factor_from_shapefile(
                     shp_path=removals_shp,
                     aoi_path=aoi_path,
-                    factor_field="removals_factor",
+                    factor_field="tof_rf",
                     default_value=config['removals_factor']
                 )
             else:
@@ -110,7 +110,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
                 config['emissions_factor'] = _get_average_factor_from_shapefile(
                     shp_path=emissions_shp,
                     aoi_path=aoi_path,
-                    factor_field="emissions_factor",
+                    factor_field="tof_ef",
                     default_value=config['emissions_factor']
                 )
             else:

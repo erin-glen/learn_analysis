@@ -369,12 +369,12 @@ def main():
 
     scales_info = [
         # Example scales (commented out unless you un-comment them)
-        # {
-        #     "scale_name": "az_counties",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
-        #     "id_field": "NAME",
-        #     "tree_canopy_source": "NLCD"
-        # },
+        {
+            "scale_name": "az_counties",
+            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
+            "id_field": "NAME",
+            "tree_canopy_source": "NLCD"
+        },
         # {
         #     "scale_name": "az_places",
         #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
