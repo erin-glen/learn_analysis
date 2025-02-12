@@ -6,8 +6,6 @@ Helper functions used across multiple parts of the GP tool for land use change a
 This module includes functions for data conversion, raster processing,
 data summarization, and calculation of emissions and removals.
 
-Author: [Your Name]
-Date: [Current Date]
 """
 
 import os
