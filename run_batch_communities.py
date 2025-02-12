@@ -365,7 +365,7 @@ def main():
       - Summarizes results in master flux/inventory CSVs
     """
     # Example inventory periods
-    inventory_periods = [(2011,2013),(2013,2016),(2016,2019),(2019,2021)]
+    inventory_periods = [(2011,2013),(2013,2016),(2016,2019),(2019,2021),(2021,2023)]
 
     scales_info = [
         # Example scales (commented out unless you un-comment them)
@@ -397,7 +397,7 @@ def main():
 
     # Decide if you want to recategorize "Forest to Grassland" w/ disturbances => "Forest Remaining Forest"
     # This is a global toggle, used for all features in all scales below
-    enable_recategorization = True
+    enable_recategorization = False
 
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
