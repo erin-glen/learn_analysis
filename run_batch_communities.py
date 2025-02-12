@@ -160,31 +160,38 @@ def build_inventory_rows(ghg_df: pd.DataFrame, feature_id: str, year_range: str)
 
 
 def process_feature(
-    feature_id,
-    geometry,
-    year1,
-    year2,
-    tree_canopy_source,
-    output_base_folder,
-    recategorize_mode=False  # <-- add a toggle for recategorization
+        feature_id,
+        geometry,
+        year1,
+        year2,
+        tree_canopy_source,
+        output_base_folder,
+        recategorize_mode=False  # Toggle for recategorization
 ) -> dict:
     """
     Process one feature geometry: run the communities analysis,
     produce landuse_result, forest_type_result, summary CSV for that feature,
-    then return both single-row gross/net flux AND the multi-row GHG inventory.
+    then return both a single-row gross/net flux dictionary AND the multi-row GHG inventory.
     """
     try:
-        # Copy geometry for AOI
-        aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{feature_id}")
+        # Create a safe version of feature_id (replace spaces with underscores)
+        safe_feature_id = feature_id.replace(" ", "_")
 
-        # Build config
-        input_config = get_input_config(str(year1), str(year2), aoi_name=None, tree_canopy_source=tree_canopy_source)
+        # Copy the input geometry to an in-memory feature (this becomes the AOI)
+        aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{safe_feature_id}")
+
+        # Build the configuration dictionary.
+        # Pass the in-memory AOI (aoi_temp) as the required 'aoi_fc' argument.
+        # Also pass the feature_id (as aoi_name) for any dictionary overrides.
+        input_config = get_input_config(str(year1), str(year2), aoi_fc=aoi_temp, aoi_name=feature_id,
+                                        tree_canopy_source=tree_canopy_source)
         input_config["cell_size"] = CELL_SIZE
         input_config["year1"] = year1
         input_config["year2"] = year2
+        # Override the 'aoi' field in the config with the current in-memory AOI
         input_config["aoi"] = aoi_temp
 
-        # If missing emission/removal factors, pull from shapefiles
+        # If missing emission/removal factors in the config, pull them from shapefiles
         if "removals_factor" not in input_config or input_config["removals_factor"] is None:
             (rem_factor, used_state) = get_removal_factor_by_state(
                 aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp"
@@ -206,7 +213,7 @@ def process_feature(
             f"TOF EmFactor={input_config['emissions_factor']} from {used_place}."
         )
 
-        # Now call perform_analysis with the chosen recategorize_mode
+        # Call the core analysis function with the updated input_config and recategorization toggle
         landuse_result, forest_type_result = perform_analysis(
             input_config,
             CELL_SIZE,
@@ -222,10 +229,11 @@ def process_feature(
             return {}
 
         # Save raw CSVs
+        from datetime import datetime as dt
         timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
         feature_folder = os.path.join(
             output_base_folder,
-            f"{feature_id}_{year1}_{year2}_{timestamp}"
+            f"{safe_feature_id}_{year1}_{year2}_{timestamp}"
         )
         os.makedirs(feature_folder, exist_ok=True)
 
@@ -234,7 +242,7 @@ def process_feature(
         landuse_result.to_csv(landuse_csv, index=False)
         forest_type_result.to_csv(forest_csv, index=False)
 
-        # Summaries
+        # Generate summary tables
         from funcs import summarize_ghg, summarize_tree_canopy, create_land_cover_transition_matrix
         landuse_matrix = create_land_cover_transition_matrix(landuse_result)
         tree_canopy_df = summarize_tree_canopy(landuse_result)
@@ -248,8 +256,8 @@ def process_feature(
             removals_factor=input_config["removals_factor"],
             c_to_co2=input_config.get("c_to_co2", 44 / 12),
         )
+        from communities_analysis import split_emissions_removals, create_ipcc_summary, write_enhanced_summary_csv
         ghg_df = split_emissions_removals(ghg_df)
-
         ipcc_df = create_ipcc_summary(ghg_df)
         summary_csv = os.path.join(feature_folder, f"summary_{timestamp}.csv")
         write_enhanced_summary_csv(
@@ -262,7 +270,8 @@ def process_feature(
             str(year2)
         )
 
-        # Single-row flux
+        # Import the gross/net flux and inventory functions from the batch module (not from funcs)
+        from run_batch_communities import calculate_gross_net_flux, build_inventory_rows
         gross_emissions, gross_removals, net_flux = calculate_gross_net_flux(ghg_df)
         flux_dict = {
             "FeatureID": feature_id,
@@ -272,10 +281,10 @@ def process_feature(
             "NetFlux": round(net_flux, 2),
         }
 
-        # Multi-row inventory
+        # Build multi-row inventory dataframe
         inventory_df = build_inventory_rows(ghg_df, feature_id, f"{year1}-{year2}")
 
-        # Cleanup
+        # Cleanup: delete the in-memory AOI feature
         arcpy.management.Delete(aoi_temp)
         return {"flux_row": flux_dict, "inventory_rows": inventory_df}
 
