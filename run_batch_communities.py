@@ -1,6 +1,5 @@
-# run_batch_communities.py
-
 import os
+import re  # <-- Added for sanitizing feature IDs
 import arcpy
 import pandas as pd
 from datetime import datetime as dt
@@ -39,13 +38,14 @@ def get_removal_factor_by_state(aoi_fc: str, state_fc: str) -> tuple:
     best_state_name = None
     largest_area = 0
 
-    # Adjust these field names to match your shapefile's schema
-    fields = ["tof_rf", "STATE_NAME", "SHAPE@AREA"]
+    # IMPORTANT: We include "SHAPE@AREA" so we can read the overlap area (row[2]).
+    # And ensure "tof_rf" and "NAME" match actual fields in 'state_removal_factors.shp'.
+    fields = ["tof_rf", "NAME", "SHAPE@AREA"]
     with arcpy.da.SearchCursor(out_intersect, fields) as cur:
         for row in cur:
-            this_factor = row[0]     # from 'tof_rf' field
-            this_state = row[1]      # from 'STATE_NAME' field
-            this_area = row[2]       # intersection area
+            this_factor = row[0]  # from 'tof_rf' field
+            this_state = row[1]   # from 'NAME' field
+            this_area = row[2]    # intersection area from SHAPE@AREA
 
             if this_area > largest_area:
                 largest_area = this_area
@@ -83,8 +83,8 @@ def get_emission_factor_by_nearest_place(aoi_fc: str, place_fc: str) -> tuple:
     best_factor = None
     best_place = None
 
-    # Adjust these field names to match your shapefile's schema
-    fields = ["tof_ef", "PLACE_NAME"]
+    # Ensure these match actual fields in 'az_county_emission_factors.shp'.
+    fields = ["tof_ef", "NAME"]
     row = next(arcpy.da.SearchCursor(out_join, fields), None)
     if row:
         best_factor = row[0]
@@ -98,11 +98,9 @@ def get_emission_factor_by_nearest_place(aoi_fc: str, place_fc: str) -> tuple:
     arcpy.management.Delete(out_join)
     return (best_factor, best_place)
 
-
 ############################
 # MAIN BATCH SCRIPT LOGIC  #
 ############################
-
 
 def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
     """
@@ -166,7 +164,7 @@ def process_feature(
     year2,
     tree_canopy_source,
     output_base_folder,
-    recategorize_mode=False  # <-- add a toggle for recategorization
+    recategorize_mode=False
 ) -> dict:
     """
     Process one feature geometry: run the communities analysis,
@@ -174,11 +172,21 @@ def process_feature(
     then return both single-row gross/net flux AND the multi-row GHG inventory.
     """
     try:
-        # Copy geometry for AOI
-        aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{feature_id}")
+        # -------------------------------------------------------------------
+        # 1) Sanitize feature_id for in-memory naming: e.g., "La Paz" => "La_Paz"
+        safe_id = re.sub(r"[^0-9a-zA-Z_]+", "_", str(feature_id))
+
+        # 2) Copy geometry for AOI using the safe name
+        aoi_temp = arcpy.management.CopyFeatures(
+            geometry, f"in_memory\\aoi_temp_{safe_id}"
+        )
+        # -------------------------------------------------------------------
 
         # Build config
-        input_config = get_input_config(str(year1), str(year2), aoi_name=None, tree_canopy_source=tree_canopy_source)
+        # (We rely on the later spatial-locate if removals/emissions_factor is None.)
+        input_config = get_input_config(str(year1), str(year2),
+                                        aoi_name=None,
+                                        tree_canopy_source=tree_canopy_source)
         input_config["cell_size"] = CELL_SIZE
         input_config["year1"] = year1
         input_config["year2"] = year2
@@ -195,18 +203,19 @@ def process_feature(
 
         if "emissions_factor" not in input_config or input_config["emissions_factor"] is None:
             (em_factor, used_place) = get_emission_factor_by_nearest_place(
-                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\place_emission_factors.shp"
+                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\az_county_emission_factors.shp"
             )
             input_config["emissions_factor"] = em_factor
         else:
             used_place = "ConfigProvided"
 
         arcpy.AddMessage(
-            f"Feature '{feature_id}' => TOF RemFactor={input_config['removals_factor']} from {used_state}, "
-            f"TOF EmFactor={input_config['emissions_factor']} from {used_place}."
+            f"Feature '{feature_id}' => TOF RemFactor={input_config['removals_factor']} "
+            f"from {used_state}, TOF EmFactor={input_config['emissions_factor']} "
+            f"from {used_place}."
         )
 
-        # Now call perform_analysis with the chosen recategorize_mode
+        # Perform analysis
         landuse_result, forest_type_result = perform_analysis(
             input_config,
             CELL_SIZE,
@@ -235,7 +244,6 @@ def process_feature(
         forest_type_result.to_csv(forest_csv, index=False)
 
         # Summaries
-        from funcs import summarize_ghg, summarize_tree_canopy, create_land_cover_transition_matrix
         landuse_matrix = create_land_cover_transition_matrix(landuse_result)
         tree_canopy_df = summarize_tree_canopy(landuse_result)
 
@@ -291,7 +299,7 @@ def run_batch_for_scale(
     tree_canopy_source: str,
     scale_name: str,
     date_str: str,
-    recategorize_mode=False  # <-- add a toggle for recategorization at the scale level
+    recategorize_mode=False
 ):
     """
     For the given shapefile (scale):
@@ -320,7 +328,6 @@ def run_batch_for_scale(
                 geometry = row[1]
                 arcpy.AddMessage(f"  -> FeatureID={feature_id}, {year1}-{year2}")
 
-                # Now we pass the recategorize_mode to process_feature
                 result_data = process_feature(
                     feature_id=feature_id,
                     geometry=geometry,
@@ -365,7 +372,11 @@ def main():
       - Summarizes results in master flux/inventory CSVs
     """
     # Example inventory periods
-    inventory_periods = [(2011,2013),(2013,2016),(2016,2019),(2019,2021),(2021,2023)]
+    inventory_periods = [(2011, 2013)]
+                         # (2013, 2016),
+                         # (2016, 2019),
+                         # (2019, 2021),
+                         # (2021, 2023)]
 
     scales_info = [
         # Example scales (commented out unless you un-comment them)
@@ -375,29 +386,28 @@ def main():
         #     "id_field": "NAME",
         #     "tree_canopy_source": "NLCD"
         # },
-        # {
-        #     "scale_name": "az_places",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
-        #     "id_field": "NAME",
-        #     "tree_canopy_source": "NLCD"
-        # },
+        {
+            "scale_name": "az_places",
+            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
+            "id_field": "NAME",
+            "tree_canopy_source": "NLCD"
+        }
         # {
         #     "scale_name": "az_tribal_nations",
         #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_tribal_nations\shapefiles\az_tribal_nations\az_tribal_nations.shp",
         #     "id_field": "NAME",
         #     "tree_canopy_source": "NLCD"
         # },
-        {
-            "scale_name": "az_state",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_state\az_state\az_state.shp",
-            "id_field": "NAME",
-            "tree_canopy_source": "NLCD"
-        }
+        # {
+        #     "scale_name": "az_state",
+        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_state\az_state\az_state.shp",
+        #     "id_field": "NAME",
+        #     "tree_canopy_source": "NLCD"
+        # }
     ]
 
     # Decide if you want to recategorize "Forest to Grassland" w/ disturbances => "Forest Remaining Forest"
-    # This is a global toggle, used for all features in all scales below
-    enable_recategorization = True
+    enable_recategorization = False
 
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
@@ -416,10 +426,11 @@ def main():
             tree_canopy_source=tree_canopy_source,
             scale_name=scale_name,
             date_str=date_str,
-            recategorize_mode=enable_recategorization  # pass to run_batch_for_scale
+            recategorize_mode=enable_recategorization
         )
 
     arcpy.AddMessage(f"\nAll scales complete. Total processing time: {dt.now() - start_time}")
+
 
 if __name__ == "__main__":
     main()

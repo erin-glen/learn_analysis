@@ -1,4 +1,3 @@
-# config.py
 import os
 
 # Base directories
@@ -6,7 +5,7 @@ DATA_FOLDER = r"C:\GIS\Data\LEARN\SourceData"
 OUTPUT_BASE_DIR = r"C:\GIS\Data\LEARN\Outputs"
 
 # Valid years for analysis
-VALID_YEARS = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019", "2021","2023"]
+VALID_YEARS = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019", "2021", "2023"]
 
 # Default cell size
 CELL_SIZE = 30
@@ -17,8 +16,9 @@ old_carbon = "Carbon"
 def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     """
     Build the input configuration dictionary specifying paths to the relevant NLCD rasters,
-    carbon rasters, forest lookups, disturbance rasters, etc. Also sets default or AOI-specific
-    emissions/removals factors for trees outside forests (TOF).
+    carbon rasters, forest lookups, disturbance rasters, etc. Also *potentially* sets
+    AOI-specific emissions/removals factors (TOF) if known, otherwise leaves them None so that
+    run_batch_communities.py can do a spatial lookup.
 
     Args:
         year1 (str): Starting year for land cover analysis (one of VALID_YEARS).
@@ -27,21 +27,21 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
         tree_canopy_source (str, optional): One of {"NLCD", "CBW", "Local"} or None.
 
     Returns:
-        dict: Dictionary of all configured paths (nlcd_1, nlcd_2, forest_age_raster, etc.)
-              plus disturbance rasters, TOF emission/removal factors, etc.
+        dict: Dictionary of all configured paths (nlcd_1, nlcd_2, forest_age_raster, etc.),
+              plus potential disturbance rasters, TOF emission/removal factors (either None
+              or from known AOI overrides), c_to_co2, etc.
     """
     # Convert input year strings to integers for comparisons
     year1 = int(year1)
     year2 = int(year2)
 
-    # Define default emissions and removals factors
+    # We no longer set non-None defaults here. If they're missing from the known AOI list,
+    # we leave them as None so that the code in run_batch_communities.py does the spatial lookup.
     default_config = {
-        'emissions_factor': 56.1,      # Default emissions factor (tC/ha)
-        'removals_factor': -3.88,     # Default removals factor (tC/ha/yr)
         'c_to_co2': 44 / 12,
     }
 
-    # Define AOI-specific factors if you have them
+    # If you do have AOI-specific factors, add them here:
     aoi_specific_factors = {
         'Montgomery': {
             'emissions_factor': 103,
@@ -60,8 +60,9 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     if aoi_name and aoi_name in aoi_specific_factors:
         config.update(aoi_specific_factors[aoi_name])
     else:
-        # Optionally warn if not recognized
-        print(f"Warning: AOI '{aoi_name}' not found in specific factors. Using default values.")
+        # We do not set any numeric defaults here; we just print a note.
+        print(f"Warning: AOI '{aoi_name}' not found in specific factors. "
+              "Will rely on spatial lookup or fallback in the code.")
 
     # Build the main input_config dict
     input_config = {
@@ -101,19 +102,21 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
             tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
-
-            # ─────────────────────────────────────────────────────────────────
-            # NEW LOGIC: If user picks 2021-2023 for land cover, override
-            # canopy to 2019/2021
-            # ─────────────────────────────────────────────────────────────────
+            # 2021-2023 override
             if (year1 == 2021 and year2 == 2023):
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif")
+                input_config["tree_canopy_1"] = os.path.join(
+                    tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif"
+                )
+                input_config["tree_canopy_2"] = os.path.join(
+                    tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
+                )
             else:
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif")
-            # ─────────────────────────────────────────────────────────────────
-
+                input_config["tree_canopy_1"] = os.path.join(
+                    tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
+                )
+                input_config["tree_canopy_2"] = os.path.join(
+                    tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif"
+                )
         elif tree_canopy_source == "CBW":
             tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "CBW")
             input_config["tree_canopy_1"] = os.path.join(
@@ -151,16 +154,16 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     for dist_info in disturbance_rasters_info:
         start = dist_info["start_year"]
         end = dist_info["end_year"]
-        # If the disturbance window is entirely within the user’s chosen [year1, year2]
         if (start >= year1) and (end <= year2):
             dist_raster_path = os.path.join(DATA_FOLDER, "Disturbances", dist_info["name"])
             selected_disturbance_rasters.append(dist_raster_path)
-
     input_config["disturbance_rasters"] = selected_disturbance_rasters
 
-    # Emissions/Removals
-    input_config['emissions_factor'] = config['emissions_factor']
-    input_config['removals_factor'] = config['removals_factor']
-    input_config['c_to_co2'] = config['c_to_co2']
+    # If config had them (like for known AOI), set them; if not, they remain None
+    input_config["emissions_factor"] = config.get("emissions_factor", None)
+    input_config["removals_factor"] = config.get("removals_factor", None)
+
+    # c_to_co2 is always set
+    input_config["c_to_co2"] = config["c_to_co2"]
 
     return input_config
