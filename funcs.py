@@ -1033,53 +1033,33 @@ def save_results(
     geography_id: str = None
 ) -> None:
     """
-    Save the land use and forest type results to CSV files, rounding to whole numbers.
+    Save the land use and forest type results to CSV files,
+    rounding numeric columns to two decimals *and* ensuring
+    two decimals in the CSV output via float_format.
     """
 
-    # 1) Define the columns to round for each DataFrame
-    #    (Adjust based on your actual columns that you want integer output)
-    landuse_numeric_cols = [
-        "Hectares", "CellCount",
-        "carbon_ag_bg_us", "carbon_sd_dd_lt", "carbon_so",
-        "fire_HA", "harvest_HA", "insect_damage_HA",
-        "TreeCanopy_HA", "TreeCanopyLoss_HA",
-        "Annual Emissions Forest to Non Forest CO2",
-    ]
-    forest_type_numeric_cols = [
-        "Hectares", "fire_HA", "harvest_HA", "insect_damage_HA", "undisturbed_HA",
-        "Annual_Removals_Undisturbed_CO2", "Annual_Removals_N_to_F_CO2",
-        "Annual_Emissions_Fire_CO2", "Annual_Emissions_Harvest_CO2", "Annual_Emissions_Insect_CO2"
-    ]
-
-    # 2) Round columns in landuse_result
+    # Optionally round at DataFrame level (if you wish).
+    landuse_numeric_cols = ["TreeCanopy_HA", "TreeCanopyLoss_HA", ...]
     for col in landuse_numeric_cols:
         if col in landuse_result.columns:
-            landuse_result[col] = (
-                pd.to_numeric(landuse_result[col], errors="coerce")
-                  .round(0)
-                  .astype("Int64")  # or just int, but "Int64" allows NaN if needed
-            )
+            landuse_result[col] = landuse_result[col].round(2)
 
-    # 3) Round columns in forest_type_result
+    forest_type_numeric_cols = ["Annual_Removals_Undisturbed_CO2", ...]
     for col in forest_type_numeric_cols:
         if col in forest_type_result.columns:
-            forest_type_result[col] = (
-                pd.to_numeric(forest_type_result[col], errors="coerce")
-                  .round(0)
-                  .astype("Int64")
-            )
+            forest_type_result[col] = forest_type_result[col].round(2)
 
-    # 4) Write the CSVs
+    # Write CSV with float_format so that the actual CSV text has only two decimals.
     timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
     geography_suffix = f"_{geography_id}" if geography_id else ""
 
     landuse_csv = os.path.join(output_path, f"landuse_result{geography_suffix}_{timestamp}.csv")
     forest_type_csv = os.path.join(output_path, f"forest_type_result{geography_suffix}_{timestamp}.csv")
 
-    landuse_result.to_csv(landuse_csv, index=False)
-    forest_type_result.to_csv(forest_type_csv, index=False)
+    landuse_result.to_csv(landuse_csv, index=False, float_format="%.2f")
+    forest_type_result.to_csv(forest_type_csv, index=False, float_format="%.2f")
 
-    # 5) Optionally, log processing time
+    # Log processing time
     processing_time = dt.now() - start_time
     with open(os.path.join(output_path, f"processing_time{geography_suffix}.txt"), "w") as f:
         f.write(f"Total processing time: {processing_time}\n")
