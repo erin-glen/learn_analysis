@@ -66,16 +66,26 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Build the main input_config dict
     input_config = {
+        # "nlcd_1": os.path.join(
+        #     DATA_FOLDER,
+        #     "LandCover",
+        #     f"NLCD_{year1}_Land_Cover_l48_20210604.tif"
+        # ),
+        # "nlcd_2": os.path.join(
+        #     DATA_FOLDER,
+        #     "LandCover",
+        #     f"NLCD_{year2}_Land_Cover_l48_20210604.tif"
+        # ),
         "nlcd_1": os.path.join(
-            DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year1}_Land_Cover_l48_20210604.tif"
-        ),
+                DATA_FOLDER,
+                "NEW_NLCD",
+                f"Annual_NLCD_LndCov_{year1}_CU_C1V0.tif"
+            ),
         "nlcd_2": os.path.join(
-            DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year2}_Land_Cover_l48_20210604.tif"
-        ),
+                DATA_FOLDER,
+                "NEW_NLCD",
+                f"Annual_NLCD_LndCov_{year2}_CU_C1V0.tif"
+            ),
         "forest_age_raster": os.path.join(
             DATA_FOLDER, "ForestType", "forest_raster_01062025.tif"
         ),
