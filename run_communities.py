@@ -29,7 +29,7 @@ if __name__ == "__main__":
     tree_canopy_source = 'NLCD'  # Set tree canopy source to 'NLCD' for all runs
 
     # Choose whether to recategorize "Forest to Grassland" with disturbances => "Forest Remaining Forest"
-    recategorize_mode = True
+    recategorize_mode = False
 
     for aoi_name in aois:
         for (year1, year2) in inventory_periods:
