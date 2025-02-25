@@ -66,26 +66,16 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Build the main input_config dict
     input_config = {
-        # "nlcd_1": os.path.join(
-        #     DATA_FOLDER,
-        #     "LandCover",
-        #     f"NLCD_{year1}_Land_Cover_l48_20210604.tif"
-        # ),
-        # "nlcd_2": os.path.join(
-        #     DATA_FOLDER,
-        #     "LandCover",
-        #     f"NLCD_{year2}_Land_Cover_l48_20210604.tif"
-        # ),
         "nlcd_1": os.path.join(
-                DATA_FOLDER,
-                "NEW_NLCD",
-                f"Annual_NLCD_LndCov_{year1}_CU_C1V0.tif"
-            ),
+            DATA_FOLDER,
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year1}_CU_C1V0.tif"
+        ),
         "nlcd_2": os.path.join(
-                DATA_FOLDER,
-                "NEW_NLCD",
-                f"Annual_NLCD_LndCov_{year2}_CU_C1V0.tif"
-            ),
+            DATA_FOLDER,
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year2}_CU_C1V0.tif"
+        ),
         "forest_age_raster": os.path.join(
             DATA_FOLDER, "ForestType", "forest_raster_01062025.tif"
         ),
@@ -112,15 +102,26 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
             tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
-            # 2021-2023 override
+            # Special logic for 2021->2023 and 2023 in general
             if (year1 == 2021 and year2 == 2023):
+                # 2021 => use 2019 TCC
+                # 2023 => use 2021 TCC
                 input_config["tree_canopy_1"] = os.path.join(
                     tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif"
                 )
                 input_config["tree_canopy_2"] = os.path.join(
                     tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
                 )
+            elif (year2 == 2023):
+                # Keep year1 as-is; use 2021 for the second year
+                input_config["tree_canopy_1"] = os.path.join(
+                    tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
+                )
+                input_config["tree_canopy_2"] = os.path.join(
+                    tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
+                )
             else:
+                # Default to using the actual year inputs
                 input_config["tree_canopy_1"] = os.path.join(
                     tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
                 )
