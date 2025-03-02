@@ -374,7 +374,7 @@ def main():
     #                      (2019, 2021),
     #                      (2021, 2023)]
 
-    inventory_periods = [(2008, 2011)]
+    inventory_periods = [(2011, 2013)]
 
 
 
