@@ -259,25 +259,50 @@ def zonal_sum_by_stratification(
 def calculate_tree_canopy(
     tree_canopy_1: str,
     tree_canopy_2: str,
-    strat_raster: Raster,
+    strat_raster: "Raster",
     tree_canopy_source: str,
     aoi: str,
     cell_size: int,
+    inventory_year1: int = None,
+    inventory_year2: int = None,
+    tcc_year1: int = None,
+    tcc_year2: int = None,
 ) -> pd.DataFrame:
     """
-    Calculate tree canopy averages and losses by stratification class.
+    Calculate tree canopy averages and losses by stratification class, optionally
+    scaling the loss if the TCC (tree canopy) period differs from the user's
+    overall inventory period.
 
     Args:
-        tree_canopy_1 (str): Path to tree canopy raster for the first year.
-        tree_canopy_2 (str): Path to tree canopy raster for the second year.
-        strat_raster (Raster): Stratification raster.
-        tree_canopy_source (str): Identifier for the tree canopy data source.
-        aoi (str): Path to the Area of Interest polygon feature.
+        tree_canopy_1 (str): Path to the tree canopy raster for the first TCC year.
+        tree_canopy_2 (str): Path to the tree canopy raster for the second TCC year.
+        strat_raster (Raster): Stratification raster (NLCD1*100 + NLCD2).
+        tree_canopy_source (str): Identifier for the tree canopy data source (e.g., "NLCD", "CBW", "Local").
+        aoi (str): Path to the AOI polygon feature.
         cell_size (int): Cell size in meters.
+        inventory_year1 (int, optional): Start year of the overall inventory period.
+        inventory_year2 (int, optional): End year of the overall inventory period.
+        tcc_year1 (int, optional): First TCC year actually used (e.g., forced to 2011 if year1<2011).
+        tcc_year2 (int, optional): Second TCC year actually used (e.g., forced to 2013 if year2<2011).
 
     Returns:
-        pd.DataFrame: DataFrame with tree canopy metrics.
+        pd.DataFrame: A DataFrame with columns:
+          [
+            "StratificationValue",
+            "NLCD1_class",
+            "NLCD2_class",
+            "TreeCanopy_HA",
+            "TreeCanopyLoss_HA"
+          ]
+        Possibly also more columns if included in merges.
     """
+    import arcpy
+    import pandas as pd
+    import numpy as np
+    from arcpy.sa import Con, Raster, ExtractByMask
+    # >>> UPDATED import without the leading dot <<<
+    from funcs import zonal_sum_by_stratification
+
     if not tree_canopy_1 or not tree_canopy_2:
         arcpy.AddMessage("Skipping Tree Canopy - no data provided.")
         return pd.DataFrame(
@@ -290,49 +315,71 @@ def calculate_tree_canopy(
             ]
         )
 
-    # Calculate average tree canopy
-    tree_canopy_avg = (Raster(tree_canopy_1) + Raster(tree_canopy_2)) / 2
+    # 1) Calculate average tree canopy (raster math)
+    canopy_1_ras = Raster(tree_canopy_1)
+    canopy_2_ras = Raster(tree_canopy_2)
+    tree_canopy_avg = (canopy_1_ras + canopy_2_ras) / 2
 
-    # Calculate tree canopy loss
+    # 2) Calculate tree canopy loss (where canopy_2 < canopy_1)
     tree_canopy_diff = Con(
-        Raster(tree_canopy_2) < Raster(tree_canopy_1),
-        Raster(tree_canopy_1) - Raster(tree_canopy_2),
+        canopy_2_ras < canopy_1_ras,
+        canopy_1_ras - canopy_2_ras,
         0,
     )
 
-    # Apply AOI mask using ExtractByMask
-    arcpy.AddMessage("Applying AOI mask using ExtractByMask.")
+    # 3) Apply AOI mask using ExtractByMask
     tree_canopy_avg_masked = ExtractByMask(tree_canopy_avg, aoi)
     tree_canopy_diff_masked = ExtractByMask(tree_canopy_diff, aoi)
 
-    # Zonal sum for average and loss
-    tc_avg_df = zonal_sum_by_stratification(strat_raster, tree_canopy_avg_masked, "TreeCanopy_HA", cell_size)
-    tc_diff_df = zonal_sum_by_stratification(strat_raster, tree_canopy_diff_masked, "TreeCanopyLoss_HA", cell_size)
+    # 4) Zonal sum for average and loss
+    tc_avg_df = zonal_sum_by_stratification(
+        strat_raster, tree_canopy_avg_masked, "TreeCanopy_HA", cell_size
+    )
+    tc_diff_df = zonal_sum_by_stratification(
+        strat_raster, tree_canopy_diff_masked, "TreeCanopyLoss_HA", cell_size
+    )
 
-    # Merge dataframes
+    # 5) Merge dataframes
     tree_cover = tc_avg_df.merge(
         tc_diff_df.drop(["Hectares", "CellCount"], axis=1),
         on=["StratificationValue", "NLCD1_class", "NLCD2_class"],
         how="outer",
     )
 
-    # Unit conversion based on data source
+    # 6) Convert from pixel values to area in hectares
+    #    For NLCD TCC data, the pixel values are % canopy. Convert % to fraction,
+    #    then multiply by pixel area in hectares = (cell_size^2 / 10,000).
     if "NLCD" in tree_canopy_source:
-        # For NLCD data
-        # Convert percentage to fraction, multiply by cell area (cell_size^2), convert to hectares
-        factor = 0.01 * (cell_size ** 2) / 10000
+        factor = 0.01 * (cell_size ** 2) / 10000.0
     elif "CBW" in tree_canopy_source:
-        # For CBW data
-        factor = (cell_size ** 2) / 10000
+        factor = (cell_size ** 2) / 10000.0
     else:
-        # Default conversion factor
-        factor = (cell_size ** 2) / 10000
+        # Default, e.g. "Local"
+        factor = (cell_size ** 2) / 10000.0
 
     tree_cover["TreeCanopy_HA"] *= factor
     tree_cover["TreeCanopyLoss_HA"] *= factor
 
-    # Drop unnecessary columns
-    tree_cover.drop(["Hectares", "CellCount"], axis=1, inplace=True)
+    # 7) If TCC period differs from inventory period, scale the canopy loss
+    if (
+        inventory_year1 is not None
+        and inventory_year2 is not None
+        and tcc_year1 is not None
+        and tcc_year2 is not None
+    ):
+        tcc_period_len = float(tcc_year2 - tcc_year1)
+        inv_period_len = float(inventory_year2 - inventory_year1)
+        if tcc_period_len > 0:
+            scale_ratio = inv_period_len / tcc_period_len
+            tree_cover["TreeCanopyLoss_HA"] *= scale_ratio
+            arcpy.AddMessage(
+                f"Scaled canopy loss by factor={scale_ratio:.2f}; "
+                f"(inventory {inventory_year1}-{inventory_year2} vs TCC {tcc_year1}-{tcc_year2})."
+            )
+        else:
+            arcpy.AddWarning(
+                "Tree canopy period length is zero or invalid; skipping time-based scaling."
+            )
 
     return tree_cover
 
