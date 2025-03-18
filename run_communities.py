@@ -24,8 +24,10 @@ def run_analysis_for_aoi_and_period(year1, year2, aoi_name, tree_canopy_source, 
 
 if __name__ == "__main__":
     # Define the AOIs and inventory periods
-    aois = ['Jefferson']
-    inventory_periods = [(2008, 2011)]
+    aois = ['eagle_county']
+    inventory_periods = [(2016,2019),
+                         (2019,2021),
+                         (2021,2023)]
     tree_canopy_source = 'NLCD'  # Set tree canopy source to 'NLCD' for all runs
 
     # Choose whether to recategorize "Forest to Grassland" with disturbances => "Forest Remaining Forest"

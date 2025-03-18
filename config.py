@@ -50,6 +50,10 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
             'emissions_factor': 95.9,
             'removals_factor': -2.82,
         },
+        'eagle_county': {
+            'emissions_factor': 58.8,
+            'removals_factor': -2.16,
+        },
     }
 
     # Start from default config
