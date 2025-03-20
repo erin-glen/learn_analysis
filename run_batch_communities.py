@@ -391,7 +391,7 @@ def main():
         }
     ]
 
-    enable_recategorization = False
+    enable_recategorization = True
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
 
