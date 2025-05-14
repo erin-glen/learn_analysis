@@ -28,7 +28,7 @@ learn_analysis/
 ├── config.py                    # Centralized configuration settings (paths, constants)
 ├── funcs.py                     # General-purpose utility functions
 ├── lookups.py                   # Lookup tables used in classifications
-└── outputs/                     # Analysis outputs and results
+
 ```
 
 ## Methodological Details
@@ -60,8 +60,6 @@ Detailed methodology, including activity data preparation, emissions and removal
 | Forest Disturbances | Regionally Modeled Disturbance Database | Non-spatial | Derived from FIA data (2001–2010) |
 
 
-
-
 ## Contributing and Maintenance
 
 We encourage contributions and feedback through GitHub Issues and pull requests. 
@@ -72,7 +70,7 @@ If using this code for academic purposes, please cite:
 
 > Glen, E., Scafidi, A., Harris, N., & Birdsey, R. (2025). Support for Subnational Entities to Develop and Monitor Land-based Greenhouse Gas Reduction Activities. *Forests, 2025.*
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgments
 
@@ -80,3 +78,7 @@ We are pleased to acknowledge the many organizations and individuals who have co
 Minnemeyer and the Chesapeake Conservancy have been instrumental in piloting the use of high-resolution tree canopy data and organizing communities in the Chesapeake BayWatershed. Barry (Ty) Wilson (USDA FS) has provided endless support in utilizing the BIGMAP data products. Andrew 
 Lister (USDA FS) has helped to guide data and user interface priorities through constructive review and advising. We are appreciative of Garrett Rose and Carolyn Ramirez from the National Resources Defense Council for their collaboration and interest in assessing federally owned forests. We thank 
 Donna Lee for her work on the LEARN tool’s conceptualization and early pilot testing. We are indebted to the various communities and organizations that actively participated in the piloting of the LEARN Tool. Finally, we thank our GIS and web development partners, Blue Raster, for their contribution to creating and maintaining the LEARN platform. Eric Ashcroft (Blue Raster) has been instrumental in leading technical development and facilitating strategic engagement. 
+
+## Contact
+
+Please contact Erin Glen (erin.glen@wri.org) with any questions or data requests. 
