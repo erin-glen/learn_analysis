@@ -1,12 +1,14 @@
-# run_crosswalk.py (Modified to skip writing per-feature CSVs)
-
+# run_crosswalk.py
 import os
 import re
 import arcpy
 import pandas as pd
 from datetime import datetime as dt
 
-from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
+# CHANGED: align with run_batch_communities.py, which uses config_local
+from config_local import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
+
+# Same imports from analysis_core, funcs, communities_analysis
 from analysis_core import perform_analysis
 from funcs import (
     summarize_ghg,
@@ -16,12 +18,19 @@ from funcs import (
 from communities_analysis import (
     split_emissions_removals,
     create_ipcc_summary,
-    write_enhanced_summary_csv,
-    subtract_recat_from_forest_to_grass
+    subtract_recat_from_forest_to_grass,
+    # We do NOT import/write_enhanced_summary_csv here since
+    # we are not writing per-feature summary CSVs
 )
 
 
 def get_removal_factor_by_state(aoi_fc: str, state_fc: str) -> tuple:
+    """
+    Intersect 'aoi_fc' with 'state_fc' polygons to find the best match
+    for the removal factor (tof_rf). If the AOI crosses multiple states,
+    pick the one with the largest overlap area.
+    Returns: (removal_factor, state_name).
+    """
     out_intersect = "in_memory\\aoi_state_intersect"
     arcpy.analysis.Intersect([aoi_fc, state_fc], out_intersect)
 
@@ -50,6 +59,10 @@ def get_removal_factor_by_state(aoi_fc: str, state_fc: str) -> tuple:
 
 
 def get_emission_factor_by_nearest_place(aoi_fc: str, place_fc: str) -> tuple:
+    """
+    Find the AOI's centroid, then find the nearest polygon in 'place_fc'
+    (which has a 'tof_ef' field). Return (emission_factor, place_name).
+    """
     centroid_fc = "in_memory\\aoi_centroid"
     arcpy.management.FeatureToPoint(aoi_fc, centroid_fc, "CENTROID")
 
@@ -80,6 +93,10 @@ def get_emission_factor_by_nearest_place(aoi_fc: str, place_fc: str) -> tuple:
 
 
 def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
+    """
+    Calculate gross emissions, gross removals, and net flux from ghg_df.
+    We rely on 'Emissions/Removals' to decide how to classify each row.
+    """
     if "Emissions" not in ghg_df.columns or "Removals" not in ghg_df.columns:
         return (0.0, 0.0, 0.0)
 
@@ -87,7 +104,7 @@ def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
     gross_removals = 0.0
 
     for _, row in ghg_df.iterrows():
-        flux = row["GHG Flux (t CO2e/year)"]
+        flux = row.get("GHG Flux (t CO2e/year)", 0)
         if row["Emissions/Removals"] == "Emissions":
             gross_emissions += flux
         else:
@@ -98,18 +115,33 @@ def calculate_gross_net_flux(ghg_df: pd.DataFrame) -> tuple:
 
 
 def build_inventory_rows(ghg_df: pd.DataFrame, feature_id: str, year_range: str) -> pd.DataFrame:
-    needed_cols = ["Category", "Type", "Emissions/Removals", "Area (ha, total)", "Emissions", "Removals"]
+    """
+    Build the entire GHG inventory for this feature & year range.
+    We combine Emissions + Removals into a single 'GHG flux' column.
+    """
+    needed_cols = [
+        "Category",
+        "Type",
+        "Emissions/Removals",
+        "Area (ha, total)",
+        "Emissions",
+        "Removals"
+    ]
     for col in needed_cols:
         if col not in ghg_df.columns:
             ghg_df[col] = 0  # fallback if missing
 
     inventory_df = ghg_df[needed_cols].copy()
-    inventory_df["GHG flux (t CO2 / year)"] = inventory_df["Emissions"] + inventory_df["Removals"]
+    inventory_df["GHG flux (t CO2 / year)"] = (
+        inventory_df["Emissions"] + inventory_df["Removals"]
+    )
 
     inventory_df["FeatureID"] = feature_id
     inventory_df["YearRange"] = year_range
 
+    # Drop the separate Emissions/Removals numeric columns
     inventory_df.drop(["Emissions", "Removals"], axis=1, inplace=True)
+
     columns_order = [
         "FeatureID",
         "YearRange",
@@ -119,9 +151,7 @@ def build_inventory_rows(ghg_df: pd.DataFrame, feature_id: str, year_range: str)
         "Area (ha, total)",
         "GHG flux (t CO2 / year)"
     ]
-    inventory_df = inventory_df[columns_order]
-
-    return inventory_df
+    return inventory_df[columns_order]
 
 
 def process_feature(
@@ -136,28 +166,30 @@ def process_feature(
     """
     Process one feature geometry in memory:
       - run the communities analysis
-      - compute GHG flux
-      - return single-row flux + the full multi-row GHG inventory
-    Note: no per-feature CSVs are written here (to improve efficiency).
+      - replicate the new logic from run_batch_communities.py (including recategorize)
+      - return single-row flux + multi-row GHG inventory
+      NOTE: we do NOT write per-feature CSVs here.
     """
     try:
-        # 1) Sanitize feature_id
+        # 1) Sanitize feature_id for in-memory usage
         safe_id = re.sub(r"[^0-9a-zA-Z_]+", "_", str(feature_id))
         aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{safe_id}")
 
         # 2) Build config
-        input_config = get_input_config(str(year1), str(year2),
-                                        aoi_name=None,
-                                        tree_canopy_source=tree_canopy_source)
+        input_config = get_input_config(
+            str(year1), str(year2),
+            aoi_name=None,
+            tree_canopy_source=tree_canopy_source
+        )
         input_config["cell_size"] = CELL_SIZE
         input_config["year1"] = year1
         input_config["year2"] = year2
         input_config["aoi"] = aoi_temp
 
-        # If missing, fetch from shapefiles
+        # If missing, fetch from shapefiles used in run_batch_communities.py
         if not input_config.get("removals_factor"):
             (rem_factor, used_state) = get_removal_factor_by_state(
-                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp"
+                aoi_temp, r"C:\GIS\LEARN\TOF\usca_factors\tof_rf_states.shp"
             )
             input_config["removals_factor"] = rem_factor
         else:
@@ -165,14 +197,15 @@ def process_feature(
 
         if not input_config.get("emissions_factor"):
             (em_factor, used_place) = get_emission_factor_by_nearest_place(
-                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\az_county_emission_factors.shp"
+                aoi_temp, r"C:\GIS\LEARN\TOF\usca_factors\tof_ef_places_states.shp"
             )
             input_config["emissions_factor"] = em_factor
         else:
             used_place = "ConfigProvided"
 
         arcpy.AddMessage(
-            f"Feature '{feature_id}' => TOF RemFactor={input_config['removals_factor']} from {used_state}, "
+            f"Feature '{feature_id}' => "
+            f"TOF RemFactor={input_config['removals_factor']} from {used_state}, "
             f"TOF EmFactor={input_config['emissions_factor']} from {used_place}."
         )
 
@@ -191,18 +224,27 @@ def process_feature(
             arcpy.management.Delete(aoi_temp)
             return {}
 
-        # Summaries in memory
+        # 4) Summaries in memory
+        #    We replicate the new approach from run_batch_communities.py
+        #    but do NOT write them to disk per feature.
         years_diff = year2 - year1
+
+        # Create land cover matrix & tree canopy summary for completeness
+        # (though we won't write them per feature)
+        landuse_matrix = create_land_cover_transition_matrix(landuse_result)
+        tree_canopy_df = summarize_tree_canopy(landuse_result)
+
         ghg_df = summarize_ghg(
             landuse_df=landuse_result,
             forest_type_df=forest_type_result,
             years=years_diff,
             emissions_factor=input_config["emissions_factor"],
             removals_factor=input_config["removals_factor"],
-            c_to_co2=input_config.get("c_to_co2", 44/12),
+            c_to_co2=input_config.get("c_to_co2", 44 / 12)
         )
         ghg_df = split_emissions_removals(ghg_df)
 
+        # NEW: recategorize logic from run_batch_communities
         if recategorize_mode:
             ghg_df = subtract_recat_from_forest_to_grass(ghg_df, forest_type_result)
 
@@ -212,10 +254,9 @@ def process_feature(
                 ghg_df[col] = pd.to_numeric(ghg_df[col], errors="coerce").fillna(0)
                 ghg_df[col] = ghg_df[col].round(0).astype(int)
 
-        # IPCC summary (we don't necessarily need to *write* it, but we create it here if needed)
-        # ipcc_df = create_ipcc_summary(ghg_df)  # Uncomment if you need it in memory
+        ipcc_df = create_ipcc_summary(ghg_df)
 
-        # 4) Single-row flux
+        # 5) Single-row flux for this feature
         gross_emissions, gross_removals, net_flux = calculate_gross_net_flux(ghg_df)
         flux_dict = {
             "FeatureID": feature_id,
@@ -225,12 +266,18 @@ def process_feature(
             "NetFlux": round(net_flux, 2),
         }
 
-        # 5) Multi-row inventory
+        # 6) Multi-row inventory
         inventory_df = build_inventory_rows(ghg_df, feature_id, f"{year1}-{year2}")
 
         # Cleanup
         arcpy.management.Delete(aoi_temp)
-        return {"flux_row": flux_dict, "inventory_rows": inventory_df}
+
+        return {
+            "flux_row": flux_dict,
+            "inventory_rows": inventory_df
+            # We do not return or write the landuse matrix, IPCC df, etc.
+            # unless you decide to incorporate them into a consolidated CSV.
+        }
 
     except Exception as e:
         arcpy.AddError(f"Error processing feature={feature_id}: {e}")
@@ -248,12 +295,12 @@ def run_batch_for_scale(
 ):
     """
     For the given shapefile (scale):
-      - For each inventory period, iterate over each feature (geometry)
+      - For each inventory period, iterate over each feature
       - Collect flux and inventory data in memory
       - Produce only two CSVs for the entire scale:
-          * master_flux_{scale_name}.csv
-          * master_inventory_{scale_name}.csv
-      (We skip the per-feature CSV outputs for efficiency.)
+          1) master_flux_{scale_name}.csv
+          2) master_inventory_{scale_name}.csv
+      (No per-feature CSV outputs.)
     """
     scale_folder = os.path.join(OUTPUT_BASE_DIR, f"{date_str}_{scale_name}")
     os.makedirs(scale_folder, exist_ok=True)
@@ -279,7 +326,7 @@ def run_batch_for_scale(
                     year1=year1,
                     year2=year2,
                     tree_canopy_source=tree_canopy_source,
-                    output_base_folder=scale_folder,  # Not actually used for file writes now
+                    output_base_folder=scale_folder,  # not used for per-feature CSV
                     recategorize_mode=recategorize_mode
                 )
                 if not result_data:
@@ -290,7 +337,7 @@ def run_batch_for_scale(
                 all_flux_rows.append(flux_dict)
                 all_inventory_rows.append(inventory_df)
 
-    # Write final master CSVs at scale level
+    # 1) Master flux CSV
     if all_flux_rows:
         df_flux = pd.DataFrame(all_flux_rows)
         master_flux_csv = os.path.join(scale_folder, f"master_flux_{scale_name}.csv")
@@ -299,6 +346,7 @@ def run_batch_for_scale(
     else:
         arcpy.AddWarning(f"No flux rows found for scale='{scale_name}'.")
 
+    # 2) Master inventory CSV
     if all_inventory_rows:
         df_inventory = pd.concat(all_inventory_rows, ignore_index=True)
         master_inv_csv = os.path.join(scale_folder, f"master_inventory_{scale_name}.csv")
@@ -310,8 +358,12 @@ def run_batch_for_scale(
 
 def main():
     """
-    Only master flux/inventory outputs will be generated.
+    Updated run_crosswalk: aligns with run_batch_communities
+    in logic/processing (incl. recategorize_mode),
+    but does NOT write per-feature CSVs.
     """
+    # Example: same default inventory_periods as run_batch_communities
+    # You can adjust or reduce as needed.
     inventory_periods = [
         (2011, 2013)
         # (2013, 2016),
@@ -320,41 +372,29 @@ def main():
         # (2021, 2023)
     ]
 
+    # Example: one scale_info entry, but feel free to add more
     scales_info = [
+        # {
+        #     "scale_name": "us_states",
+        #     "shapefile": r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_state\tl_2023_us_state.shp",
+        #     "id_field": "STATEFP",
+        #     "tree_canopy_source": "NLCD"
+        # },
         {
-            "scale_name": "az_counties",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
+            "scale_name": "us_counties",
+            "shapefile": r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_county\tl_2023_us_county.shp",
             "id_field": "GEOID",
             "tree_canopy_source": "NLCD"
         }
         # {
-        #     "scale_name": "az_places",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
-        #     "id_field": "GEOID",
-        #     "tree_canopy_source": "NLCD"
-        # },
-        # {
-        #     "scale_name": "az_tribal_nations",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_tribal_nations\shapefiles\az_tribal_nations\az_tribal_nations.shp",
-        #     "id_field": "GEOID",
-        #     "tree_canopy_source": "NLCD"
-        # },
-        # {
-        #     "scale_name": "az_state",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_state\az_state\az_state.shp",
-        #     "id_field": "STATEFP",
-        #     "tree_canopy_source": "NLCD"
-        # },
-        # {
-        #     "scale_name": "az_block_groups",
-        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_block_groups\tl_2024_04_bg.shp",
+        #     "scale_name": "us_tribal",
+        #     "shapefile": r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_aiannh\tl_2023_us_aiannh.shp",
         #     "id_field": "GEOID",
         #     "tree_canopy_source": "NLCD"
         # }
     ]
 
-    enable_recategorization = True
-
+    enable_recategorization = False
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
 

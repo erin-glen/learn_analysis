@@ -6,7 +6,7 @@ import arcpy
 import pandas as pd
 from datetime import datetime as dt
 
-from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
+from config_local import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
 from funcs import (
     summarize_ghg,
@@ -179,7 +179,7 @@ def process_feature(
         # If missing, fetch from shapefiles
         if not input_config.get("removals_factor"):
             (rem_factor, used_state) = get_removal_factor_by_state(
-                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\state_removal_factors.shp"
+                aoi_temp, r"C:\GIS\LEARN\TOF\usca_factors\tof_rf_states.shp"
             )
             input_config["removals_factor"] = rem_factor
         else:
@@ -187,7 +187,7 @@ def process_feature(
 
         if not input_config.get("emissions_factor"):
             (em_factor, used_place) = get_emission_factor_by_nearest_place(
-                aoi_temp, r"C:\GIS\Data\LEARN\SourceData\TOF\az_county_emission_factors.shp"
+                aoi_temp, r"C:\GIS\LEARN\TOF\usca_factors\tof_ef_places_states.shp"
             )
             input_config["emissions_factor"] = em_factor
         else:
@@ -368,29 +368,41 @@ def main():
     # inventory_periods = [(2011, 2021),
     #                      (2013, 2023)]
 
-    # inventory_periods = [(2011, 2013),
-    #                      (2013, 2016),
-    #                      (2016, 2019),
-    #                      (2019, 2021),
-    #                      (2021, 2023)]
+    inventory_periods = [(2011, 2013),
+                         (2013, 2016),
+                         (2016, 2019),
+                         (2019, 2021),
+                         (2021, 2023)]
 
-    inventory_periods = [(2011, 2013)]
+    # inventory_periods = [(2011, 2013)]
 
 
 
     scales_info = [
+        {
+            "scale_name": "us_tribal",
+            "shapefile": r"C:\GIS\LEARN\census\tl_2023_us_aiannh\tl_2023_us_aiannh_conus.shp",
+            "id_field": "GEOID",
+            "tree_canopy_source": "NLCD"
+        },
         # {
         #     "scale_name": "az_state",
         #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_state\az_state\az_state.shp",
         #     "id_field": "NAME",
         #     "tree_canopy_source": "NLCD"
         # },
-        {
-            "scale_name": "az_counties",
-            "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
-            "id_field": "NAME",
-            "tree_canopy_source": "NLCD"
-        }
+        # {
+        #     "scale_name": "az_counties",
+        #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_counties\shapefiles\az_counties\az_counties.shp",
+        #     "id_field": "NAME",
+        #     "tree_canopy_source": "NLCD"
+        # }
+        # {
+        #     "scale_name": "fed_forests",
+        #     "shapefile": r"C:\GIS\LEARN\AOI\PADUS_BLM_USFS_STATE_PRJ.shp",
+        #     "id_field": "FID",
+        #     "tree_canopy_source": "NLCD"
+        # }
         # {
         #     "scale_name": "az_places",
         #     "shapefile": r"C:\GIS\Data\LEARN\census\Arizona\az_places\shapefiles\az_places\az_places.shp",
@@ -405,7 +417,7 @@ def main():
         # }
     ]
 
-    enable_recategorization = True
+    enable_recategorization = False
     start_time = dt.now()
     date_str = start_time.strftime("%Y_%m_%d_%H_%M")
 
