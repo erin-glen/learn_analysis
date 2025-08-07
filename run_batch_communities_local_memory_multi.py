@@ -219,8 +219,9 @@ def run_batch(
     inventory_periods,
     processes,
     chunk_size,
+    run_date=None,
 ):
-    date_str = dt.now().strftime("%Y_%m_%d_%H_%M")
+    date_str = run_date or dt.now().strftime("%Y_%m_%d_%H_%M")
     scale_folder = os.path.join(OUTPUT_BASE_DIR, f"{date_str}_{scale_name}")
     os.makedirs(scale_folder, exist_ok=True)
 
@@ -271,6 +272,7 @@ def parse_args():
     )
     parser.add_argument("--processes", type=int, default=multiprocessing.cpu_count(), help="Worker processes")
     parser.add_argument("--chunk-size", type=int, default=50, help="Features per chunk")
+    parser.add_argument("--run-date", help="Custom run date for output folder, e.g. 2025_04_23_03_29")
     return parser.parse_args()
 
 
@@ -285,6 +287,7 @@ def main():
         inventory_periods=inventory_periods,
         processes=args.processes,
         chunk_size=args.chunk_size,
+        run_date=args.run_date,
     )
 
 
@@ -294,6 +297,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         main()
     else:
+        run_date = dt.now().strftime("%Y_%m_%d_%H_%M")
         run_batch(
             shapefile=r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_place\tl_2023_us_place_conus.shp",
             id_field="GEOID",
@@ -302,4 +306,5 @@ if __name__ == "__main__":
             inventory_periods=[(2021, 2023)],
             processes=6,
             chunk_size=50,
+            run_date=run_date,
         )
