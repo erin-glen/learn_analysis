@@ -306,5 +306,5 @@ if __name__ == "__main__":
             inventory_periods=[(2021, 2023)],
             processes=6,
             chunk_size=50,
-            run_date=run_date,
+            run_date="2025_04_28_18_42"
         )
