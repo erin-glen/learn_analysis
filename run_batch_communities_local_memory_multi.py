@@ -71,17 +71,17 @@ def get_processed_ids_for_period(scale_folder, year1, year2):
 
     for csv_file in glob.glob(csv_pattern):
         try:
-            df = pd.read_csv(csv_file, usecols=["FeatureID"])
-            processed_ids.update(df["FeatureID"].astype(str).unique())
+            df = pd.read_csv(csv_file, usecols=["FeatureID"], dtype={"FeatureID": str})
+            processed_ids.update(df["FeatureID"].unique())
         except Exception as e:
             arcpy.AddWarning(f"Could not read existing chunk {csv_file}: {e}")
 
     if os.path.exists(final_csv):
         try:
-            df = pd.read_csv(final_csv, usecols=["FeatureID", "YearRange"])
+            df = pd.read_csv(final_csv, usecols=["FeatureID", "YearRange"], dtype={"FeatureID": str})
             period = f"{year1}-{year2}"
             processed_ids.update(
-                df.loc[df["YearRange"] == period, "FeatureID"].astype(str).unique()
+                df.loc[df["YearRange"] == period, "FeatureID"].unique()
             )
         except Exception as e:
             arcpy.AddWarning(f"Could not read final CSV {final_csv}: {e}")
@@ -174,7 +174,7 @@ def worker(args):
         if os.path.exists(chunk_csv):
             try:
                 existing_ids = set(
-                    pd.read_csv(chunk_csv, usecols=["FeatureID"])["FeatureID"].astype(str)
+                    pd.read_csv(chunk_csv, usecols=["FeatureID"], dtype={"FeatureID": str})["FeatureID"]
                 )
                 arcpy.AddMessage(
                     f"Chunk {chunk_id}: found {len(existing_ids)} existing records"
@@ -228,7 +228,7 @@ def merge_csv_outputs(scale_folder):
         print("No chunk CSVs found; skipping merge.")
         return
 
-    df_list = [pd.read_csv(csv_file) for csv_file in all_csv_files]
+    df_list = [pd.read_csv(csv_file, dtype={"FeatureID": str}) for csv_file in all_csv_files]
     master_df = pd.concat(df_list).drop_duplicates(subset=["FeatureID", "YearRange"])
 
     master_csv_path = os.path.join(scale_folder, "master_flux_final.csv")
