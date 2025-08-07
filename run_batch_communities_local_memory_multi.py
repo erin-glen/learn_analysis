@@ -210,36 +210,21 @@ def merge_csv_outputs(scale_folder):
     print(f"Merged final CSV written to: {master_csv_path}")
 
 
-# CLI argument parsing and main entry point
-def parse_args():
-    parser = argparse.ArgumentParser(description="Batch process communities with optional resume support")
-    parser.add_argument("--shapefile", required=True, help="Path to input shapefile")
-    parser.add_argument("--id-field", default="GEOID", help="Unique ID field in shapefile")
-    parser.add_argument("--scale-name", default="us_places", help="Identifier for output folder")
-    parser.add_argument("--tree-canopy-source", default="NLCD", help="Tree canopy source")
-    parser.add_argument(
-        "--period", action="append", nargs=2, metavar=("YEAR1", "YEAR2"), type=int, required=True,
-        help="Inventory period pair, e.g. --period 2021 2023"
-    )
-    parser.add_argument("--processes", type=int, default=multiprocessing.cpu_count(), help="Worker processes")
-    parser.add_argument("--chunk-size", type=int, default=50, help="Features per chunk")
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-
-    inventory_periods = [tuple(p) for p in args.period]
-    shapefile = args.shapefile
-    id_field = args.id_field
-    scale_name = args.scale_name
-    tree_canopy_source = args.tree_canopy_source
-
+# Core batch runner shared by CLI and built-in run block
+def run_batch(
+    shapefile,
+    id_field,
+    scale_name,
+    tree_canopy_source,
+    inventory_periods,
+    processes,
+    chunk_size,
+):
     date_str = dt.now().strftime("%Y_%m_%d_%H_%M")
     scale_folder = os.path.join(OUTPUT_BASE_DIR, f"{date_str}_{scale_name}")
     os.makedirs(scale_folder, exist_ok=True)
 
-    pool = multiprocessing.Pool(processes=args.processes)
+    pool = multiprocessing.Pool(processes=processes)
     jobs = []
 
     for year1, year2 in inventory_periods:
@@ -260,7 +245,7 @@ def main():
                     year2,
                     tree_canopy_source,
                     scale_folder,
-                    args.chunk_size,
+                    chunk_size,
                 )
                 jobs.append(pool.apply_async(worker, args=(job_args,)))
 
@@ -273,5 +258,48 @@ def main():
     merge_csv_outputs(scale_folder)
 
 
+# CLI argument parsing and main entry point
+def parse_args():
+    parser = argparse.ArgumentParser(description="Batch process communities with optional resume support")
+    parser.add_argument("--shapefile", required=True, help="Path to input shapefile")
+    parser.add_argument("--id-field", default="GEOID", help="Unique ID field in shapefile")
+    parser.add_argument("--scale-name", default="us_places", help="Identifier for output folder")
+    parser.add_argument("--tree-canopy-source", default="NLCD", help="Tree canopy source")
+    parser.add_argument(
+        "--period", action="append", nargs=2, metavar=("YEAR1", "YEAR2"), type=int, required=True,
+        help="Inventory period pair, e.g. --period 2021 2023",
+    )
+    parser.add_argument("--processes", type=int, default=multiprocessing.cpu_count(), help="Worker processes")
+    parser.add_argument("--chunk-size", type=int, default=50, help="Features per chunk")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    inventory_periods = [tuple(p) for p in args.period]
+    run_batch(
+        shapefile=args.shapefile,
+        id_field=args.id_field,
+        scale_name=args.scale_name,
+        tree_canopy_source=args.tree_canopy_source,
+        inventory_periods=inventory_periods,
+        processes=args.processes,
+        chunk_size=args.chunk_size,
+    )
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) > 1:
+        main()
+    else:
+        run_batch(
+            shapefile=r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_place\tl_2023_us_place_conus.shp",
+            id_field="GEOID",
+            scale_name="us_places",
+            tree_canopy_source="NLCD",
+            inventory_periods=[(2021, 2023)],
+            processes=6,
+            chunk_size=50,
+        )
