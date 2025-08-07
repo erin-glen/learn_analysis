@@ -146,13 +146,22 @@ def worker(args):
         chunk_id = f"{state_fp}_{year1}_{year2}_chunk_{start}"
         chunk_csv = os.path.join(scale_folder, f"master_flux_{chunk_id}.csv")
 
-        # Skip the entire chunk if previously completed
+        # Track FeatureIDs already present in this chunk so re-runs only
+        # process missing features rather than skipping the whole chunk
+        existing_ids = set()
         if os.path.exists(chunk_csv):
-            arcpy.AddMessage(f"Chunk {chunk_id} already processed. Skipping.")
-            continue
+            try:
+                existing_ids = set(
+                    pd.read_csv(chunk_csv, usecols=["FeatureID"])["FeatureID"].astype(str)
+                )
+            except Exception as e:
+                arcpy.AddWarning(f"Could not read existing chunk {chunk_id}: {e}")
 
         flux_rows = []
         for feature_id, geometry in feature_list[start:start + chunk_size]:
+            if str(feature_id) in existing_ids:
+                continue
+
             result = process_feature(feature_id, geometry, year1, year2, tree_canopy_source, scratch_gdb)
             if result:
                 flux_rows.append(result)
@@ -163,8 +172,8 @@ def worker(args):
         if flux_rows:
             pd.DataFrame(flux_rows).to_csv(
                 chunk_csv,
-                mode='w',
-                header=True,
+                mode='a' if os.path.exists(chunk_csv) else 'w',
+                header=not os.path.exists(chunk_csv),
                 index=False
             )
 
