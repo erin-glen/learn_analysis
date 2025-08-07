@@ -155,6 +155,9 @@ def worker(args):
                 existing_ids = set(
                     pd.read_csv(chunk_csv, usecols=["FeatureID"])["FeatureID"].astype(str)
                 )
+                arcpy.AddMessage(
+                    f"Chunk {chunk_id}: found {len(existing_ids)} existing records"
+                )
             except Exception as e:
                 arcpy.AddWarning(f"Could not read existing chunk {chunk_id}: {e}")
 
@@ -179,6 +182,9 @@ def worker(args):
                 index=False,
             )
 
+        arcpy.AddMessage(
+            f"Chunk {chunk_id}: processed {len(flux_rows)} new features, skipped {len(existing_ids)} existing features"
+        )
         log_memory(f"Worker {os.getpid()} processed chunk {start}-{start + chunk_size}")
 
     arcpy.ClearWorkspaceCache_management()
@@ -230,6 +236,10 @@ def run_batch(
 
     for year1, year2 in inventory_periods:
         processed_ids = get_processed_ids_for_period(scale_folder, year1, year2)
+        if processed_ids:
+            arcpy.AddMessage(
+                f"Period {year1}-{year2}: found {len(processed_ids)} previously processed records"
+            )
 
         grouped_features = {}
         with arcpy.da.SearchCursor(shapefile, [id_field, "STATEFP", "SHAPE@"]) as cursor:
