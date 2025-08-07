@@ -1,5 +1,6 @@
 import os
 import re
+import argparse
 import arcpy
 import pandas as pd
 import gc
@@ -170,11 +171,12 @@ def worker(args):
             gc.collect()
 
         if flux_rows:
+            chunk_exists = os.path.exists(chunk_csv)
             pd.DataFrame(flux_rows).to_csv(
                 chunk_csv,
-                mode='a' if os.path.exists(chunk_csv) else 'w',
-                header=not os.path.exists(chunk_csv),
-                index=False
+                mode='a' if chunk_exists else 'w',
+                header=not chunk_exists,
+                index=False,
             )
 
         log_memory(f"Worker {os.getpid()} processed chunk {start}-{start + chunk_size}")
@@ -193,11 +195,14 @@ def worker(args):
 
 # Merge CSV outputs
 def merge_csv_outputs(scale_folder):
-    import glob
-
+    """Merge all chunk CSVs into a single deduplicated master file."""
     all_csv_files = glob.glob(os.path.join(scale_folder, "master_flux_*.csv"))
+    if not all_csv_files:
+        print("No chunk CSVs found; skipping merge.")
+        return
+
     df_list = [pd.read_csv(csv_file) for csv_file in all_csv_files]
-    master_df = pd.concat(df_list).drop_duplicates(subset=['FeatureID', 'YearRange'])
+    master_df = pd.concat(df_list).drop_duplicates(subset=["FeatureID", "YearRange"])
 
     master_csv_path = os.path.join(scale_folder, "master_flux_final.csv")
     master_df.to_csv(master_csv_path, index=False)
@@ -205,18 +210,36 @@ def merge_csv_outputs(scale_folder):
     print(f"Merged final CSV written to: {master_csv_path}")
 
 
-# Main Execution
+# CLI argument parsing and main entry point
+def parse_args():
+    parser = argparse.ArgumentParser(description="Batch process communities with optional resume support")
+    parser.add_argument("--shapefile", required=True, help="Path to input shapefile")
+    parser.add_argument("--id-field", default="GEOID", help="Unique ID field in shapefile")
+    parser.add_argument("--scale-name", default="us_places", help="Identifier for output folder")
+    parser.add_argument("--tree-canopy-source", default="NLCD", help="Tree canopy source")
+    parser.add_argument(
+        "--period", action="append", nargs=2, metavar=("YEAR1", "YEAR2"), type=int, required=True,
+        help="Inventory period pair, e.g. --period 2021 2023"
+    )
+    parser.add_argument("--processes", type=int, default=multiprocessing.cpu_count(), help="Worker processes")
+    parser.add_argument("--chunk-size", type=int, default=50, help="Features per chunk")
+    return parser.parse_args()
+
+
 def main():
-    inventory_periods = [(2021, 2023)]  # adjust as needed
-    shapefile = r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_place\tl_2023_us_place_conus.shp"
-    id_field = "GEOID"
-    scale_name = "us_places"
-    tree_canopy_source = 'NLCD'
-    date_str = dt.now().strftime("2025_04_28_18_42")
+    args = parse_args()
+
+    inventory_periods = [tuple(p) for p in args.period]
+    shapefile = args.shapefile
+    id_field = args.id_field
+    scale_name = args.scale_name
+    tree_canopy_source = args.tree_canopy_source
+
+    date_str = dt.now().strftime("%Y_%m_%d_%H_%M")
     scale_folder = os.path.join(OUTPUT_BASE_DIR, f"{date_str}_{scale_name}")
     os.makedirs(scale_folder, exist_ok=True)
 
-    pool = multiprocessing.Pool(processes=6)
+    pool = multiprocessing.Pool(processes=args.processes)
     jobs = []
 
     for year1, year2 in inventory_periods:
@@ -230,7 +253,15 @@ def main():
 
         for state_fp, feature_list in grouped_features.items():
             if feature_list:
-                job_args = (state_fp, feature_list, year1, year2, tree_canopy_source, scale_folder, 50)
+                job_args = (
+                    state_fp,
+                    feature_list,
+                    year1,
+                    year2,
+                    tree_canopy_source,
+                    scale_folder,
+                    args.chunk_size,
+                )
                 jobs.append(pool.apply_async(worker, args=(job_args,)))
 
     for job in jobs:
@@ -240,7 +271,6 @@ def main():
     pool.join()
 
     merge_csv_outputs(scale_folder)
-
 
 
 if __name__ == "__main__":
