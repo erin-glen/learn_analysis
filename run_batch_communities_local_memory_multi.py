@@ -67,12 +67,33 @@ def log_memory(stage):
 def get_processed_ids_for_period(scale_folder, year1, year2):
     processed_ids = set()
     csv_pattern = os.path.join(scale_folder, f"master_flux_*_{year1}_{year2}_chunk_*.csv")
+    final_csv = os.path.join(scale_folder, "master_flux_final.csv")
 
     for csv_file in glob.glob(csv_pattern):
-        df = pd.read_csv(csv_file, usecols=['FeatureID'])
-        processed_ids.update(df['FeatureID'].astype(str).unique())
+        try:
+            df = pd.read_csv(csv_file, usecols=["FeatureID"])
+            processed_ids.update(df["FeatureID"].astype(str).unique())
+        except Exception as e:
+            arcpy.AddWarning(f"Could not read existing chunk {csv_file}: {e}")
+
+    if os.path.exists(final_csv):
+        try:
+            df = pd.read_csv(final_csv, usecols=["FeatureID", "YearRange"])
+            period = f"{year1}-{year2}"
+            processed_ids.update(
+                df.loc[df["YearRange"] == period, "FeatureID"].astype(str).unique()
+            )
+        except Exception as e:
+            arcpy.AddWarning(f"Could not read final CSV {final_csv}: {e}")
 
     return processed_ids
+
+
+def log_preprocessed_features(processed_ids, year1, year2):
+    for fid in sorted(processed_ids):
+        arcpy.AddMessage(
+            f"Period {year1}-{year2}: FeatureID {fid} already processed; skipping"
+        )
 
 
 
@@ -240,6 +261,7 @@ def run_batch(
             arcpy.AddMessage(
                 f"Period {year1}-{year2}: found {len(processed_ids)} previously processed records"
             )
+            log_preprocessed_features(processed_ids, year1, year2)
 
         grouped_features = {}
         with arcpy.da.SearchCursor(shapefile, [id_field, "STATEFP", "SHAPE@"]) as cursor:
