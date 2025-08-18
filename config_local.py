@@ -97,82 +97,45 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     # If tree_canopy_source is set, choose appropriate canopy data
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
+            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_2025")
 
-            # If either year1 or year2 is < 2011, force TCC = (2011, 2013)
-            if year1 < 2011 or year2 < 2011:
-                # Force 2011, 2013
-                input_config["tree_canopy_1"] = os.path.join(
-                    tc_folder, "nlcd_tcc_conus_2011_v2021-4_projected.tif"
-                )
-                input_config["tree_canopy_2"] = os.path.join(
-                    tc_folder, "nlcd_tcc_conus_2013_v2021-4_projected.tif"
-                )
-                # Record the TCC years used
-                input_config["tcc_year_1"] = 2011
-                input_config["tcc_year_2"] = 2013
+            # Always use the analysis years exactly as entered
+            tcc_year_1 = year1
+            tcc_year_2 = year2
 
+            # Support both naming patterns that exist across machines
+            new_1 = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_wgs84_v2023-5_{tcc_year_1}0101_{tcc_year_1}1231_projected.tif"
+            )
+            new_2 = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_wgs84_v2023-5_{tcc_year_2}0101_{tcc_year_2}1231_projected.tif"
+            )
+            old_1 = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_{tcc_year_1}_v2021-4_projected.tif"
+            )
+            old_2 = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_{tcc_year_2}_v2021-4_projected.tif"
+            )
+
+            # Prefer the newer (v2023-5, date-stamped) files if both exist; otherwise use the older (v2021-4) names.
+            if os.path.exists(new_1) and os.path.exists(new_2):
+                input_config["tree_canopy_1"] = new_1
+                input_config["tree_canopy_2"] = new_2
+            elif os.path.exists(old_1) and os.path.exists(old_2):
+                input_config["tree_canopy_1"] = old_1
+                input_config["tree_canopy_2"] = old_2
             else:
-                # Otherwise, use normal logic including special 2021->2023
-                if (year1 == 2021 and year2 == 2023):
-                    # 2021 => use 2019 TCC
-                    # 2023 => use 2021 TCC
-                    input_config["tree_canopy_1"] = os.path.join(
-                        tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif"
-                    )
-                    input_config["tree_canopy_2"] = os.path.join(
-                        tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
-                    )
-                    input_config["tcc_year_1"] = 2019
-                    input_config["tcc_year_2"] = 2021
+                # Default to the newer pattern (clearer failure path if files are missing)
+                input_config["tree_canopy_1"] = new_1
+                input_config["tree_canopy_2"] = new_2
 
-                elif (year2 == 2023):
-                    # Keep year1 as-is; use 2021 for the second year
-                    input_config["tree_canopy_1"] = os.path.join(
-                        tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
-                    )
-                    input_config["tree_canopy_2"] = os.path.join(
-                        tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif"
-                    )
-                    input_config["tcc_year_1"] = year1
-                    input_config["tcc_year_2"] = 2021
-
-                else:
-                    # Default to using the actual year inputs
-                    input_config["tree_canopy_1"] = os.path.join(
-                        tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif"
-                    )
-                    input_config["tree_canopy_2"] = os.path.join(
-                        tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif"
-                    )
-                    input_config["tcc_year_1"] = year1
-                    input_config["tcc_year_2"] = year2
-
-        elif tree_canopy_source == "CBW":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "CBW")
-            input_config["tree_canopy_1"] = os.path.join(
-                tc_folder, "cbw_2013_treecanopy_Agg30m_int.tif"
-            )
-            input_config["tree_canopy_2"] = os.path.join(
-                tc_folder, "cbw_2018_treecanopy_Agg30m_int.tif"
-            )
-            # If needed, store TCC years used for CBW
-            input_config["tcc_year_1"] = 2013
-            input_config["tcc_year_2"] = 2018
-
-        elif tree_canopy_source == "Local":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "Local", aoi_name)
-            input_config["tree_canopy_1"] = os.path.join(
-                tc_folder, f"{aoi_name}_2016.tif"
-            )
-            input_config["tree_canopy_2"] = os.path.join(
-                tc_folder, f"{aoi_name}_2020.tif"
-            )
-            input_config["tcc_year_1"] = 2016
-            input_config["tcc_year_2"] = 2020
-
-        else:
-            raise ValueError(f"Invalid tree canopy source: {tree_canopy_source}")
+            # Expose the years used (some downstream code expects these keys)
+            input_config["tcc_year_1"] = tcc_year_1
+            input_config["tcc_year_2"] = tcc_year_2
 
     # Disturbance rasters info
     disturbance_rasters_info = [

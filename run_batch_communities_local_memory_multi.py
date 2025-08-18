@@ -331,12 +331,13 @@ if __name__ == "__main__":
     else:
         run_date = dt.now().strftime("%Y_%m_%d_%H_%M")
         run_batch(
-            shapefile=r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_place\tl_2023_us_place_conus.shp",
+            # shapefile=r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_place\tl_2023_us_place_conus.shp",
+            shapefile=r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_county\tl_2023_us_county_conus.shp",
             id_field="GEOID",
-            scale_name="us_places",
+            scale_name="us_counties",
             tree_canopy_source="NLCD",
-            inventory_periods=[(2021, 2023)],
+            inventory_periods=[(2011, 2013)],
             processes=6,
             chunk_size=50,
-            run_date="2025_04_28_18_42",
+            run_date="2025_08_18_18_42",
         )
