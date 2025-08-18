@@ -116,8 +116,8 @@ def log_memory(stage):
 def is_feature_processed(output_csv, feature_id):
     if not os.path.exists(output_csv):
         return False
-    df = pd.read_csv(output_csv, usecols=['FeatureID'])
-    return str(feature_id) in df['FeatureID'].astype(str).values
+    df = pd.read_csv(output_csv, usecols=['FeatureID'], dtype={'FeatureID': str})
+    return str(feature_id) in df['FeatureID'].values
 
 # --- Main Batch Function ---
 def run_batch_for_scale(shapefile, id_field, inventory_periods, tree_canopy_source, scale_name, date_str,
