@@ -67,13 +67,13 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     input_config = {
         "nlcd_1": os.path.join(
             DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year1}_Land_Cover_l48_20210604.tif"
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year1}_CU_C1V0.tif"
         ),
         "nlcd_2": os.path.join(
             DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year2}_Land_Cover_l48_20210604.tif"
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year2}_CU_C1V0.tif"
         ),
         "forest_age_raster": os.path.join(
             DATA_FOLDER, "ForestType", "forest_raster_01062025.tif"
@@ -100,18 +100,10 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     # If tree_canopy_source is set, choose appropriate canopy data
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
+            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_v2023-5_project")
 
-            # ─────────────────────────────────────────────────────────────────
-            # NEW LOGIC: If user picks 2021-2023 for land cover, override
-            # canopy to 2019/2021
-            # ─────────────────────────────────────────────────────────────────
-            if (year1 == 2021 and year2 == 2023):
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif")
-            else:
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif")
+            input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_wgs84_v2023-5_{year1}0101_{year1}1231_projected.tif")
+            input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_wgs84_v2023-5_{year2}0101_{year2}1231_projected.tif")
             # ─────────────────────────────────────────────────────────────────
 
         elif tree_canopy_source == "CBW":
