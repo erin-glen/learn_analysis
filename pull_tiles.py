@@ -1,3 +1,12 @@
+"""Utility script for listing Hansen tiles that overlap a target raster.
+
+Example
+-------
+```
+python pull_tiles.py
+```
+"""
+
 import os
 import glob
 import sys

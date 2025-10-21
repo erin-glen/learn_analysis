@@ -10,11 +10,25 @@ For each configured period, the script:
 
 This version prefers the NLCD Land Cover (2021) raster as the global reference
 for ArcPy env; if missing, it will fall back to the period's end-year TCC raster.
+
+Set ``disturbance_config.HARVEST_WORKFLOW = "nlcd_tcc_severity"`` to integrate
+these severity rasters into the final disturbance combination workflow.
+
+Example
+-------
+```
+python harvest_other_severity.py --tile-id GFW2023_40N_090W
+```
+
+The ``--tile-id`` filter is accepted for consistency with the Hansen workflow
+but currently logged and ignored because NLCD TCC rasters are not tiled.
 """
 
 import os
 import logging
 import arcpy
+import argparse
+from typing import Iterable, Sequence
 
 import disturbance_config as cfg
 
@@ -60,8 +74,46 @@ def _classify_loss(loss_raster):
     )
 
 
-def main():
+def _parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Derive harvest/other severity rasters from NLCD Tree Canopy Cover. "
+            "Tile filters are accepted for parity with the Hansen workflow "
+            "but will be ignored because the rasters are not tiled."
+        )
+    )
+    parser.add_argument(
+        "--tile-id",
+        dest="tile_ids",
+        action="append",
+        default=[],
+        metavar="TILE_ID",
+        help="Optional Hansen-style tile ids (ignored, logged for awareness).",
+    )
+    parser.add_argument(
+        "--tiles",
+        dest="tile_csv",
+        metavar="ID1,ID2",
+        help="Comma-separated list of tile ids (ignored, logged).",
+    )
+    return parser.parse_args(argv)
+
+
+def _combine_tile_args(tile_ids: Iterable[str], csv: str | None) -> list[str]:
+    combined = list(tile_ids) if tile_ids else []
+    if csv:
+        combined.extend(part.strip() for part in csv.split(",") if part.strip())
+    return combined
+
+
+def main(tile_ids: Iterable[str] | None = None):
     logging.info("Starting NLCD Tree Canopy change-based harvest/other processing.")
+    tile_ids = list(tile_ids) if tile_ids else []
+    if tile_ids:
+        logging.info(
+            "Tile filter requested (%s) but NLCD TCC rasters are not tiled; proceeding with full extent.",
+            ", ".join(tile_ids),
+        )
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")
     try:
@@ -134,4 +186,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = _parse_cli_args()
+    combined_tiles = _combine_tile_args(args.tile_ids, args.tile_csv)
+    main(tile_ids=combined_tiles)

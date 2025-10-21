@@ -2,6 +2,12 @@
 Processes raw Insect/Disease data by reading ESRI FileGDB layers
 using OGR, filtering by year, and rasterizing each region to match
 the NLCD resolution/extent. Must be run in a GDAL/OGR environment.
+
+Example
+-------
+```
+python insect_disease_process.py --period 2019_2021
+```
 """
 
 import os

@@ -6,6 +6,12 @@ This script calls insect_disease_process.py as a subprocess
 for a hardcoded list of time periods.
 
 Simply edit HARDCODED_PERIODS below to add/remove periods.
+
+Example
+-------
+```
+python run_insect_disease.py
+```
 """
 
 import logging
