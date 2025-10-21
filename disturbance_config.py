@@ -28,6 +28,21 @@ INSECT_FINAL_DIR = os.path.join(INSECT_GDB_DIR, "Final")
 HANSEN_INPUT_DIR = os.path.join(BASE_DIR, "Hansen")
 HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
 
+# For Harvest/Other (NLCD Tree Canopy Change):
+NLCD_TCC_INPUT_DIR = os.path.join(BASE_DIR, "NLCD_TreeCanopy")
+NLCD_TCC_OUTPUT_DIR = os.path.join(NLCD_TCC_INPUT_DIR, "Processed")
+
+# NLCD Tree Canopy rasters by year (update the filenames to match your data)
+NLCD_TCC_RASTERS = {
+    2016: os.path.join(NLCD_TCC_INPUT_DIR, "nlcd_tree_canopy_2016.tif"),
+    2019: os.path.join(NLCD_TCC_INPUT_DIR, "nlcd_tree_canopy_2019.tif"),
+    2021: os.path.join(NLCD_TCC_INPUT_DIR, "nlcd_tree_canopy_2021.tif"),
+    2023: os.path.join(NLCD_TCC_INPUT_DIR, "nlcd_tree_canopy_2023.tif"),
+}
+
+# Thresholds (upper bounds) for assigning canopy-loss severity classes 1-4
+NLCD_TCC_SEVERITY_BREAKS = [25, 50, 75, 100]
+
 # For Fire:
 FIRE_ROOT = os.path.join(BASE_DIR, "Fire", "Raw", "composite_data", "MTBS_BSmosaics")
 FIRE_OUTPUT_DIR = os.path.join(BASE_DIR, "Fire", "Processed")
@@ -41,6 +56,7 @@ for _dir in [
     INSECT_OUTPUT_DIR,
     INSECT_FINAL_DIR,
     HANSEN_OUTPUT_DIR,
+    NLCD_TCC_OUTPUT_DIR,
     FIRE_OUTPUT_DIR,
     INTERMEDIATE_COMBINED_DIR,
     FINAL_COMBINED_DIR
