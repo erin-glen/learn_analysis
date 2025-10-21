@@ -2,6 +2,12 @@
 """
 Merges per-region insect/disease rasters (values {0,5})
 into a single CONUS raster for each time period.
+
+Example
+-------
+```
+python insect_disease_merge.py
+```
 """
 
 import arcpy

@@ -3,6 +3,7 @@
 import os
 import glob
 import logging
+from typing import Iterable, List, Sequence
 
 # --------------------------------------------------------------------
 # LOGGING CONFIG
@@ -22,7 +23,7 @@ INSECT_GDB_DIR = os.path.join(BASE_DIR, "ADS")
 INSECT_OUTPUT_DIR = os.path.join(INSECT_GDB_DIR, "Processed")
 INSECT_FINAL_DIR = os.path.join(INSECT_GDB_DIR, "Final")
 
-# Hansen
+# Hansen (Hansen Global Forest Change harvest proxy)
 HANSEN_INPUT_DIR = os.path.join(BASE_DIR, "Hansen")
 HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
 
@@ -72,6 +73,63 @@ if _missing_tcc:
 NLCD_TCC_SEVERITY_BREAKS = [25, 50, 75, 100]
 
 # --------------------------------------------------------------------
+# HARVEST WORKFLOW SELECTION
+# --------------------------------------------------------------------
+# Two harvest/other processing options are supported:
+#   * "hansen"              => harvest_other.py
+#   * "nlcd_tcc_severity"   => harvest_other_severity.py
+# Update HARVEST_WORKFLOW to toggle between the legacy Hansen workflow
+# and the newer NLCD Tree Canopy Cover severity workflow.
+HARVEST_WORKFLOW = "hansen"
+
+HARVEST_PRODUCTS = {
+    "hansen": {
+        "module": "harvest_other",
+        "description": "Hansen Global Forest Change based harvest/other",
+        "raster_directory": HANSEN_OUTPUT_DIR,
+        "raster_template": "hansen_{period}.tif",
+        "combined_output_subdir": "hansen",
+    },
+    "nlcd_tcc_severity": {
+        "module": "harvest_other_severity",
+        "description": "NLCD Tree Canopy Cover change severity",
+        "raster_directory": NLCD_TCC_OUTPUT_DIR,
+        "raster_template": "nlcd_tcc_severity_{period}.tif",
+        "combined_output_subdir": "nlcd_tcc_severity",
+    },
+}
+
+
+def harvest_product_config(workflow: str = None):
+    """Return the harvest configuration for the selected workflow."""
+
+    wf = workflow or HARVEST_WORKFLOW
+    if wf not in HARVEST_PRODUCTS:
+        raise ValueError(
+            f"Unknown harvest workflow '{wf}'. Valid options: {sorted(HARVEST_PRODUCTS)}"
+        )
+    return dict(HARVEST_PRODUCTS[wf])
+
+
+def harvest_raster_path(period_name: str, workflow: str = None) -> str:
+    """Return the expected harvest raster path for the given period."""
+
+    config = harvest_product_config(workflow)
+    directory = config["raster_directory"]
+    template = config["raster_template"]
+    return os.path.join(directory, template.format(period=period_name))
+
+
+def final_combined_dir(workflow: str = None) -> str:
+    """Directory for final disturbance rasters for the selected harvest workflow."""
+
+    config = harvest_product_config(workflow)
+    combined_subdir = config.get("combined_output_subdir") or (workflow or HARVEST_WORKFLOW)
+    path = os.path.join(FINAL_COMBINED_ROOT_DIR, combined_subdir)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+# --------------------------------------------------------------------
 # NLCD LAND COVER (reference raster for env)
 # --------------------------------------------------------------------
 NLCD_LC_DIR = r"C:\GIS\Data\LEARN\SourceData\NEW_NLCD"
@@ -98,19 +156,28 @@ FIRE_OUTPUT_DIR = os.path.join(BASE_DIR, "Fire", "Processed")
 # FINAL COMBINATION OUTPUTS
 # --------------------------------------------------------------------
 INTERMEDIATE_COMBINED_DIR = os.path.join(BASE_DIR, "Intermediate")
-FINAL_COMBINED_DIR = os.path.join(BASE_DIR, "FinalCombined")
+FINAL_COMBINED_ROOT_DIR = os.path.join(BASE_DIR, "FinalCombined")
+# Backwards compatibility: legacy callers may still reference FINAL_COMBINED_DIR
+FINAL_COMBINED_DIR = FINAL_COMBINED_ROOT_DIR
 
 # Create directories if they don’t exist:
-for _dir in [
+_BASE_DIRS = [
     INSECT_OUTPUT_DIR,
     INSECT_FINAL_DIR,
     HANSEN_OUTPUT_DIR,
     NLCD_TCC_OUTPUT_DIR,
     FIRE_OUTPUT_DIR,
     INTERMEDIATE_COMBINED_DIR,
-    FINAL_COMBINED_DIR
-]:
+    FINAL_COMBINED_ROOT_DIR,
+]
+
+for _dir in _BASE_DIRS:
     os.makedirs(_dir, exist_ok=True)
+
+for _cfg in HARVEST_PRODUCTS.values():
+    combined_subdir = _cfg.get("combined_output_subdir") or ""
+    if combined_subdir:
+        os.makedirs(os.path.join(FINAL_COMBINED_ROOT_DIR, combined_subdir), exist_ok=True)
 
 # --------------------------------------------------------------------
 # REGIONS & TIME PERIODS
@@ -154,3 +221,77 @@ HANSEN_TILES = [
     r"C:\GIS\Data\LEARN\Disturbances\Hansen\GFW2023_60N_120W.tif",
     r"C:\GIS\Data\LEARN\Disturbances\Hansen\GFW2023_60N_130W.tif",
 ]
+
+
+def _hansen_tile_id(tile_path: str) -> str:
+    """Return the bare tile identifier (filename without extension)."""
+
+    base = os.path.basename(tile_path)
+    stem, _ = os.path.splitext(base)
+    return stem
+
+
+_HANSEN_TILE_LOOKUP = {
+    _hansen_tile_id(path).upper(): path
+    for path in HANSEN_TILES
+}
+
+
+def normalize_tile_ids(tile_ids: Sequence[str]) -> List[str]:
+    """Normalize user-provided Hansen tile identifiers."""
+
+    normed: List[str] = []
+    for raw in tile_ids:
+        if raw is None:
+            continue
+        tile = raw.strip().upper()
+        if not tile:
+            continue
+        tile = tile.replace(".TIF", "")
+        if tile in _HANSEN_TILE_LOOKUP:
+            normed.append(tile)
+            continue
+        prefixed = tile if tile.startswith("GFW") else f"GFW2023_{tile.lstrip('_')}"
+        normed.append(prefixed)
+    return normed
+
+
+def hansen_tile_paths(tile_ids: Iterable[str] | None = None) -> List[str]:
+    """Return Hansen tile paths filtered by ``tile_ids`` if provided."""
+
+    if not tile_ids:
+        return list(HANSEN_TILES)
+
+    selected: List[str] = []
+    missing: List[str] = []
+    for tile in normalize_tile_ids(tile_ids):
+        path = _HANSEN_TILE_LOOKUP.get(tile)
+        if path:
+            selected.append(path)
+        else:
+            missing.append(tile)
+
+    if missing:
+        logging.warning(
+            "Ignored %d Hansen tile id(s) with no match: %s",
+            len(missing),
+            ", ".join(sorted(set(missing))),
+        )
+
+    # Deduplicate while preserving order of input sequence
+    seen = set()
+    ordered: List[str] = []
+    for path in selected:
+        if path not in seen:
+            ordered.append(path)
+            seen.add(path)
+
+    if not ordered:
+        logging.error("No Hansen tiles matched the provided ids. Using full tile list instead.")
+        return list(HANSEN_TILES)
+
+    logging.info("Selected %d Hansen tile(s).", len(ordered))
+    for path in ordered:
+        logging.info("  %s", path)
+
+    return ordered

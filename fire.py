@@ -11,6 +11,12 @@ Processes MTBS fire data in two stages:
    - For each time period in cfg.TIME_PERIODS, gather the reclassified rasters
      for each year in that period, perform CellStatistics (MAX), and save
      the final as fire_{period}.tif.
+
+Example
+-------
+```
+python fire.py
+```
 """
 
 import arcpy
