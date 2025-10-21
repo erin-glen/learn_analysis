@@ -29,7 +29,7 @@ HANSEN_INPUT_DIR = os.path.join(BASE_DIR, "Hansen")
 HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
 
 # For Harvest/Other (NLCD Tree Canopy Change):
-NLCD_TCC_INPUT_DIR = os.path.join(BASE_DIR, "NLCD_TreeCanopy")
+NLCD_TCC_INPUT_DIR = os.path.join(r"C:\GIS\Data\LEARN\SourceData\TreeCanopy\NLCD_Project")
 NLCD_TCC_OUTPUT_DIR = os.path.join(NLCD_TCC_INPUT_DIR, "Processed")
 
 # NLCD Tree Canopy rasters by year (update the filenames to match your data)
