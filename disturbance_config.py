@@ -97,6 +97,13 @@ HARVEST_PRODUCTS = {
         "raster_template": "nlcd_tcc_severity_{period}.tif",
         "combined_output_subdir": "nlcd_tcc_severity",
     },
+    "nlcd_tcc_percent_severity": {
+        "module": "harvest_other_severity_percent",
+        "description": "NLCD Tree Canopy Cover percent change severity",
+        "raster_directory": NLCD_TCC_OUTPUT_DIR,
+        "raster_template": "nlcd_tcc_pct_severity_{period}.tif",
+        "combined_output_subdir": "nlcd_tcc_percent_severity",
+    },
 }
 
 
