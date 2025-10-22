@@ -11,17 +11,11 @@ For each configured period, the script:
 This version prefers the NLCD Land Cover (2021) raster as the global reference
 for ArcPy env; if missing, it will fall back to the period's end-year TCC raster.
 
-Set ``disturbance_config.HARVEST_WORKFLOW = "nlcd_tcc_severity"`` to integrate
-these severity rasters into the final disturbance combination workflow.
-
-Example
--------
-```
-python harvest_other_severity.py --tile-id GFW2023_40N_090W
-```
-
-The ``--tile-id`` filter is accepted for consistency with the Hansen workflow
-but currently logged and ignored because NLCD TCC rasters are not tiled.
+Fixes:
+- Robust NoData handling (mask out values outside 0–100 and nulls).
+- Change is computed only where BOTH years are valid.
+- Change clipped to [-100, 100].
+- Always overwrites outputs; logs min/max to confirm range.
 """
 
 import os
@@ -114,6 +108,7 @@ def main(tile_ids: Iterable[str] | None = None):
             "Tile filter requested (%s) but NLCD TCC rasters are not tiled; proceeding with full extent.",
             ", ".join(tile_ids),
         )
+
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")
     try:
@@ -123,7 +118,11 @@ def main(tile_ids: Iterable[str] | None = None):
         else:
             logging.warning("NLCD_RASTER missing; will set env per-period from TCC.")
 
-        from arcpy.sa import Abs, Con, Raster
+        from arcpy.sa import Abs, Con, Raster, SetNull, IsNull
+
+        # -------- constants for validity --------
+        VALID_MIN = 0
+        VALID_MAX = 100
 
         for period_name, years in cfg.TIME_PERIODS.items():
             if not years:
@@ -155,30 +154,50 @@ def main(tile_ids: Iterable[str] | None = None):
             out_change = os.path.join(cfg.NLCD_TCC_OUTPUT_DIR, f"nlcd_tcc_change_{period_name}.tif")
             out_severity = os.path.join(cfg.NLCD_TCC_OUTPUT_DIR, f"nlcd_tcc_severity_{period_name}.tif")
 
-            if arcpy.Exists(out_severity):
-                logging.info("Severity exists for '%s' => %s. Skipping.", period_name, out_severity)
-                continue
-
             logging.info(
                 "Processing '%s' with start=%s end=%s", period_name, start_year, end_year
             )
             logging.info("  Start TCC => %s", start_path)
             logging.info("  End   TCC => %s", end_path)
 
+            # ----- load rasters -----
             start_r = Raster(start_path)
             end_r = Raster(end_path)
-            change_r = end_r - start_r
 
-            if arcpy.Exists(out_change):
-                logging.info("Change exists for '%s' => %s. Overwriting in memory only.", period_name, out_change)
-            else:
-                change_r.save(out_change)
-                logging.info("Saved change => %s", out_change)
+            # ----- mask to valid range and nulls BEFORE math -----
+            # invalid if null OR <0 OR >100
+            invalid_start = IsNull(start_r) | (start_r < VALID_MIN) | (start_r > VALID_MAX)
+            invalid_end   = IsNull(end_r)   | (end_r   < VALID_MIN) | (end_r   > VALID_MAX)
 
+            start_valid = SetNull(invalid_start, start_r)  # NoData where invalid
+            end_valid   = SetNull(invalid_end,   end_r)
+
+            # only compute change where BOTH are valid
+            change_r = SetNull(IsNull(start_valid) | IsNull(end_valid), end_valid - start_valid)
+
+            # clip to [-100, 100] just in case any edge rounding sneaks through
+            change_r = Con(change_r < -100, -100, Con(change_r > 100, 100, change_r))
+
+            # ----- save change (always overwrite) -----
+            change_r.save(out_change)
+            logging.info("Saved canopy change raster => %s", out_change)
+
+            # quick sanity check on range after save
+            try:
+                arcpy.management.CalculateStatistics(out_change)
+                mn = float(arcpy.management.GetRasterProperties(out_change, "MINIMUM").getOutput(0))
+                mx = float(arcpy.management.GetRasterProperties(out_change, "MAXIMUM").getOutput(0))
+                logging.info("Range for %s change: min=%s max=%s", period_name, mn, mx)
+            except Exception as e:
+                logging.warning("Could not compute stats for %s: %s", out_change, e)
+
+            # ----- derive loss magnitude and severity -----
             loss_r = Con(change_r < 0, Abs(change_r), 0)
             severity_r = _classify_loss(loss_r)
+
+            # save severity (always overwrite)
             severity_r.save(out_severity)
-            logging.info("Saved severity => %s", out_severity)
+            logging.info("Saved canopy loss severity raster => %s", out_severity)
 
         logging.info("Completed NLCD TCC change processing.")
     finally:
