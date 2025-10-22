@@ -186,7 +186,11 @@ REGIONS = [1, 2, 3, 4, 6, 8, 9]
 
 # Choose periods that match available TCC endpoints
 TIME_PERIODS = {
+    "2011_2013": [2011, 2013],
+    "2013_2016": [2013, 2016],
+    "2016_2019": [2016, 2019],
     "2019_2021": [2019, 2021],
+    "2021_2023": [2019, 2023]
     # add more when corresponding TCC rasters are available
 }
 
