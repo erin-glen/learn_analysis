@@ -11,27 +11,37 @@ Final codes:
 Also exports a “harvest_counted” layer = harvest after masking out any fire/insect.
 """
 
-import arcpy
-from arcpy.sa import *  # noqa
 import os
 import logging
+import arcpy
+from arcpy.sa import *  # noqa
 import disturbance_config as cfg
 
 def _exists(p): return bool(p) and (arcpy.Exists(p) or os.path.exists(p))
 
 def _set_env_from_dataset(ds):
-    if not _exists(ds): raise FileNotFoundError(f"Cannot set env; dataset not found: {ds}")
+    if not _exists(ds):
+        raise FileNotFoundError(f"Cannot set env; dataset not found: {ds}")
     d = arcpy.Describe(ds)
-    arcpy.env.snapRaster = ds; arcpy.env.cellSize = ds
-    arcpy.env.extent = d.extent; arcpy.env.outputCoordinateSystem = d.spatialReference
+    arcpy.env.snapRaster = ds
+    arcpy.env.cellSize = ds
+    arcpy.env.extent = d.extent
+    arcpy.env.outputCoordinateSystem = d.spatialReference
     logging.info("ArcPy env initialized from: %s", ds)
 
 def _save_byte_tif(ras, out_tif):
     try:
-        if arcpy.Exists(out_tif): arcpy.management.Delete(out_tif)
-    except Exception: pass
+        if arcpy.Exists(out_tif):
+            arcpy.management.Delete(out_tif)
+    except Exception:
+        pass
     with arcpy.EnvManager(compression="LZW", pyramid="NONE"):
         arcpy.management.CopyRaster(ras, out_tif, pixel_type="8_BIT_UNSIGNED", format="TIFF")
+    if getattr(cfg, "COMPUTE_OUTPUT_STATS", False):
+        try:
+            arcpy.management.CalculateStatistics(out_tif)
+        except Exception:
+            pass
 
 def _mask_low_severity_fire(fire_ras: Raster) -> Raster:
     mask_fire = getattr(cfg, "MASK_LOW_SEVERITY_FIRE", True)
@@ -48,6 +58,10 @@ def main():
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
     arcpy.env.pyramid = "NONE"
+    arcpy.env.parallelProcessingFactor = getattr(cfg, "PARALLEL_PROCESSING_FACTOR", "90%")
+    if getattr(cfg, "SCRATCH_WORKSPACE", ""):
+        arcpy.env.scratchWorkspace = cfg.SCRATCH_WORKSPACE
+        arcpy.env.workspace = cfg.SCRATCH_WORKSPACE
 
     if not _exists(cfg.NLCD_RASTER):
         raise FileNotFoundError(f"NLCD_RASTER not found: {cfg.NLCD_RASTER}")
@@ -69,10 +83,10 @@ def main():
         harvest_path= cfg.harvest_raster_path(period)
 
         inputs = {"fire": fire_path, "insect": insect_path, "harvest": harvest_path}
-        missing = [k for k,v in inputs.items() if not _exists(v)]
+        missing = [k for k, v in inputs.items() if not _exists(v)]
         if missing:
             lines = [f"Input status for period={period}:"]
-            for name,p in inputs.items():
+            for name, p in inputs.items():
                 lines.append(f"  - {name:<7}: {p} [{'OK' if _exists(p) else 'MISSING'}]")
             logging.warning("\n".join(lines))
             logging.error("Skipping period=%s due to missing inputs: %s", period, ", ".join(missing))
@@ -87,7 +101,7 @@ def main():
         fire_masked = _mask_low_severity_fire(fire_ras)
         fire_final  = Con(fire_masked > 0, 10, 0)
 
-        # Insect: presence -> 5 (we treat any nonzero as insect)
+        # Insect: presence -> 5 (treat any nonzero as insect presence)
         insect_final = Con(insect_ras > 0, 5, 0)
 
         # Combined MAX (DATA) using standardized codes
@@ -115,7 +129,8 @@ def main():
         processed.append(period)
 
     logging.info("Run summary -> processed: %d, skipped: %d", len(processed), len(skipped))
-    if processed: logging.info("Processed periods: %s", ", ".join(processed))
+    if processed:
+        logging.info("Processed periods: %s", ", ".join(processed))
     if skipped:
         for period, miss in skipped:
             logging.warning("Skipped %s (missing: %s)", period, ", ".join(miss))
