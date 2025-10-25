@@ -50,6 +50,12 @@ def _find_tifs(directories: Sequence[str]) -> List[str]:
 
 
 def _compress_raster(path: str, *, overwrite: bool, dry_run: bool, creation_opts: Sequence[str]) -> bool:
+    target_path = path if overwrite else f"{os.path.splitext(path)[0]}_lzw.tif"
+
+    if not overwrite and os.path.exists(target_path):
+        logging.info("Skipping (already exists): %s", target_path)
+        return True
+
     logging.info("Compressing: %s", path)
     if dry_run:
         return True
@@ -76,9 +82,8 @@ def _compress_raster(path: str, *, overwrite: bool, dry_run: bool, creation_opts
     if overwrite:
         os.replace(tmp_path, path)
     else:
-        compressed_path = f"{os.path.splitext(path)[0]}_lzw.tif"
-        os.replace(tmp_path, compressed_path)
-        logging.info("Compressed copy written to %s", compressed_path)
+        os.replace(tmp_path, target_path)
+        logging.info("Compressed copy written to %s", target_path)
     return True
 
 
