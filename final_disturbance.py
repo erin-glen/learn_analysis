@@ -1,7 +1,7 @@
 # final_disturbance.py
 """
 Combines fire, insect, and harvest rasters via CellStatistics (MAX).
-Saves to a centralized NLCD_harvest_severity folder structure with LZW compression.
+Saves to a centralized NLCD_harvest_severity folder structure without compression.
 
 Final codes:
   1–4 : Harvest severity (as provided by the chosen harvest workflow)
@@ -35,8 +35,7 @@ def _save_byte_tif(ras, out_tif):
             arcpy.management.Delete(out_tif)
     except Exception:
         pass
-    with arcpy.EnvManager(compression="LZW", pyramid="NONE"):
-        arcpy.management.CopyRaster(ras, out_tif, pixel_type="8_BIT_UNSIGNED", format="TIFF")
+    arcpy.management.CopyRaster(ras, out_tif, pixel_type="8_BIT_UNSIGNED", format="TIFF")
     if getattr(cfg, "COMPUTE_OUTPUT_STATS", False):
         try:
             arcpy.management.CalculateStatistics(out_tif)
