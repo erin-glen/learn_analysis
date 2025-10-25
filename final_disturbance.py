@@ -29,7 +29,10 @@ def _set_env_from_dataset(ds):
     arcpy.env.outputCoordinateSystem = d.spatialReference
     logging.info("ArcPy env initialized from: %s", ds)
 
-def _save_byte_tif(ras, out_tif):
+def _save_byte_tif(ras, out_tif, *, overwrite=False):
+    if not overwrite and _exists(out_tif):
+        logging.info("Skipping existing output: %s", out_tif)
+        return False
     try:
         if arcpy.Exists(out_tif):
             arcpy.management.Delete(out_tif)
@@ -41,6 +44,7 @@ def _save_byte_tif(ras, out_tif):
             arcpy.management.CalculateStatistics(out_tif)
         except Exception:
             pass
+    return True
 
 def _mask_low_severity_fire(fire_ras: Raster) -> Raster:
     mask_fire = getattr(cfg, "MASK_LOW_SEVERITY_FIRE", True)
@@ -89,7 +93,7 @@ def main():
                 lines.append(f"  - {name:<7}: {p} [{'OK' if _exists(p) else 'MISSING'}]")
             logging.warning("\n".join(lines))
             logging.error("Skipping period=%s due to missing inputs: %s", period, ", ".join(missing))
-            skipped.append((period, missing))
+            skipped.append({"period": period, "reason": "missing inputs", "details": missing})
             continue
 
         fire_ras   = Raster(fire_path)
@@ -106,33 +110,58 @@ def main():
         # Combined MAX (DATA) using standardized codes
         combined_max = CellStatistics([fire_final, insect_final, harvest_ras], "MAXIMUM", "DATA")
 
-        # Save combined
         out_combined = os.path.join(final_out_dir, f"disturb_{method_tag}_{period}.tif")
-        _save_byte_tif(combined_max, out_combined)
-        logging.info("Final combined disturbance => %s", out_combined)
-
-        # Export “what counts as harvest” after masking out fire/insect:
-        # keep harvest 1–4 only where fire==0 and insect==0
-        harvest_counted = Con((fire_final > 0) | (insect_final > 0), 0, harvest_ras)
         out_harvest_only = os.path.join(cfg.NLCD_FINAL_HARVEST_ONLY_DIR, f"harvest_counted_{method_tag}_{period}.tif")
-        _save_byte_tif(harvest_counted, out_harvest_only)
-        logging.info("Harvest counted (masked by fire/insect) => %s", out_harvest_only)
-
-        # Convenience exports of presence layers
         out_insect = os.path.join(cfg.NLCD_FINAL_INSECT_DIR, f"insect_{period}.tif")
-        _save_byte_tif(insect_final, out_insect)
-
         out_fire = os.path.join(cfg.NLCD_FINAL_FIRE_DIR, f"fire_{period}.tif")
-        _save_byte_tif(fire_final, out_fire)
 
-        processed.append(period)
+        outputs = {
+            "combined": out_combined,
+            "harvest_only": out_harvest_only,
+            "insect": out_insect,
+            "fire": out_fire,
+        }
+        if all(_exists(path) for path in outputs.values()):
+            logging.info("All final disturbance outputs already exist for %s; skipping.", period)
+            skipped.append({"period": period, "reason": "existing outputs", "details": list(outputs.values())})
+            continue
+
+        wrote_any = False
+
+        if _save_byte_tif(combined_max, out_combined):
+            logging.info("Final combined disturbance => %s", out_combined)
+            wrote_any = True
+
+        harvest_counted = Con((fire_final > 0) | (insect_final > 0), 0, harvest_ras)
+        if _save_byte_tif(harvest_counted, out_harvest_only):
+            logging.info("Harvest counted (masked by fire/insect) => %s", out_harvest_only)
+            wrote_any = True
+
+        if _save_byte_tif(insect_final, out_insect):
+            wrote_any = True
+
+        if _save_byte_tif(fire_final, out_fire):
+            wrote_any = True
+
+        if wrote_any:
+            processed.append(period)
+        else:
+            skipped.append({"period": period, "reason": "existing outputs", "details": list(outputs.values())})
 
     logging.info("Run summary -> processed: %d, skipped: %d", len(processed), len(skipped))
     if processed:
         logging.info("Processed periods: %s", ", ".join(processed))
     if skipped:
-        for period, miss in skipped:
-            logging.warning("Skipped %s (missing: %s)", period, ", ".join(miss))
+        for item in skipped:
+            reason = item.get("reason", "unknown reason")
+            period = item.get("period")
+            details = item.get("details")
+            if reason == "missing inputs" and details:
+                logging.warning("Skipped %s (missing: %s)", period, ", ".join(details))
+            elif reason == "existing outputs":
+                logging.info("Skipped %s (all outputs already exist)", period)
+            else:
+                logging.info("Skipped %s (%s)", period, reason)
 
     arcpy.CheckInExtension("Spatial")
     logging.info("final_disturbance.py completed.")

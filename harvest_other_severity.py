@@ -18,7 +18,10 @@ def _set_env(ds):
     arcpy.env.extent = d.extent
     arcpy.env.outputCoordinateSystem = d.spatialReference
 
-def _save_tif(ras, out_tif, pixel_type):
+def _save_tif(ras, out_tif, pixel_type, *, overwrite=False):
+    if not overwrite and _exists(out_tif):
+        logging.info("Skipping existing output: %s", out_tif)
+        return False
     try:
         if arcpy.Exists(out_tif):
             arcpy.management.Delete(out_tif)
@@ -30,6 +33,7 @@ def _save_tif(ras, out_tif, pixel_type):
             arcpy.management.CalculateStatistics(out_tif)
         except Exception:
             pass
+    return True
 
 def _classify_loss(loss_r):
     b1, b2, b3, b4 = sorted(cfg.NLCD_TCC_SEVERITY_BREAKS)
@@ -72,6 +76,17 @@ def main():
                 logging.error("Skipping %s (missing TCC).", pname)
                 continue
 
+            out_change   = os.path.join(cfg.NLCD_TCC_CHANGE_DIR, f"nlcd_tcc_change_{pname}.tif")
+            out_severity = os.path.join(cfg.NLCD_HARVEST_SEVERITY_DIR, f"nlcd_tcc_severity_{pname}.tif")
+
+            write_change = getattr(cfg, "WRITE_PP_CHANGE", True)
+            expected = [out_severity]
+            if write_change:
+                expected.append(out_change)
+            if all(_exists(p) for p in expected):
+                logging.info("Outputs already exist for %s; skipping.", pname)
+                continue
+
             start_r, end_r = Raster(sp), Raster(ep)
             inv_s = IsNull(start_r) | (start_r < 0) | (start_r > 100)
             inv_e = IsNull(end_r)   | (end_r   < 0) | (end_r   > 100)
@@ -81,19 +96,16 @@ def main():
             dpp = SetNull(IsNull(s_ok) | IsNull(e_ok), e_ok - s_ok)
             dpp = Con(dpp < -100, -100, Con(dpp > 100, 100, dpp))
 
-            out_change   = os.path.join(cfg.NLCD_TCC_CHANGE_DIR, f"nlcd_tcc_change_{pname}.tif")
-            out_severity = os.path.join(cfg.NLCD_HARVEST_SEVERITY_DIR, f"nlcd_tcc_severity_{pname}.tif")
-
-            if getattr(cfg, "WRITE_PP_CHANGE", True):
-                _save_tif(Int(dpp), out_change, "16_BIT_SIGNED")
-                logging.info("Saved pp change => %s", out_change)
+            if write_change:
+                if _save_tif(Int(dpp), out_change, "16_BIT_SIGNED"):
+                    logging.info("Saved pp change => %s", out_change)
             else:
                 logging.info("WRITE_PP_CHANGE=False; skipping write of %s", out_change)
 
             loss = Con(dpp < 0, Abs(dpp), 0)
             sev  = _classify_loss(loss)
-            _save_tif(sev, out_severity, "8_BIT_UNSIGNED")
-            logging.info("Saved pp-based severity => %s", out_severity)
+            if _save_tif(sev, out_severity, "8_BIT_UNSIGNED"):
+                logging.info("Saved pp-based severity => %s", out_severity)
         logging.info("Completed pp-change processing.")
     finally:
         arcpy.CheckInExtension("Spatial")
