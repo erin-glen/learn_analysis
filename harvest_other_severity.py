@@ -2,13 +2,17 @@
 import os
 import logging
 import arcpy
-from arcpy.sa import Abs, Con, Raster, SetNull, IsNull, Int  # noqa
+from arcpy.sa import Abs, Con, Float, Raster, SetNull, IsNull, Int  # noqa
 import disturbance_config as cfg
+
+# Toggle: store percent-change as INT16 with scale (e.g., 0.1% units) to shrink files
+SAVE_PCT_AS_INT16 = False
+PCT_SCALE = 10  # -100..100% -> -1000..1000 (0.1% units)
 
 def _exists(p): return bool(p) and (arcpy.Exists(p) or os.path.exists(p))
 
-def _tcc(year):
-    p = cfg.NLCD_TCC_RASTERS.get(year)
+def _tcc(y):
+    p = cfg.NLCD_TCC_RASTERS.get(y)
     return p if _exists(p) else None
 
 def _set_env(ds):
@@ -18,7 +22,10 @@ def _set_env(ds):
     arcpy.env.extent = d.extent
     arcpy.env.outputCoordinateSystem = d.spatialReference
 
-def _save_tif(ras, out_tif, pixel_type):
+def _save_tif(ras, out_tif, pixel_type, *, overwrite=False):
+    if not overwrite and _exists(out_tif):
+        logging.info("Skipping existing output: %s", out_tif)
+        return False
     try:
         if arcpy.Exists(out_tif):
             arcpy.management.Delete(out_tif)
@@ -30,9 +37,13 @@ def _save_tif(ras, out_tif, pixel_type):
             arcpy.management.CalculateStatistics(out_tif)
         except Exception:
             pass
+    return True
+
+def _pct_breaks():
+    return getattr(cfg, "NLCD_TCC_PCT_SEVERITY_BREAKS", cfg.NLCD_TCC_SEVERITY_BREAKS)
 
 def _classify_loss(loss_r):
-    b1, b2, b3, b4 = sorted(cfg.NLCD_TCC_SEVERITY_BREAKS)
+    b1, b2, b3, b4 = sorted(_pct_breaks())
     return Con(
         loss_r <= 0, 0,
         Con(
@@ -48,7 +59,7 @@ def _classify_loss(loss_r):
     )
 
 def main():
-    logging.info("Starting NLCD TCC pp-change processing.")
+    logging.info("Starting NLCD TCC percent-change processing.")
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
     arcpy.env.pyramid = "NONE"
@@ -61,6 +72,8 @@ def main():
             raise FileNotFoundError(cfg.NLCD_RASTER)
         _set_env(cfg.NLCD_RASTER)
 
+        min_base = getattr(cfg, "NLCD_TCC_PCT_MIN_BASE", 0)
+
         for pname, years in cfg.TIME_PERIODS.items():
             if not years:
                 continue
@@ -72,29 +85,45 @@ def main():
                 logging.error("Skipping %s (missing TCC).", pname)
                 continue
 
+            out_change   = os.path.join(cfg.NLCD_TCC_PCT_CHANGE_DIR, f"nlcd_tcc_pct_change_{pname}.tif")
+            out_severity = os.path.join(cfg.NLCD_HARVEST_PCT_SEV_DIR,  f"nlcd_tcc_pct_severity_{pname}.tif")
+
+            write_change = getattr(cfg, "WRITE_PCT_CHANGE", True)
+            expected = [out_severity]
+            if write_change:
+                expected.append(out_change)
+            if all(_exists(p) for p in expected):
+                logging.info("Outputs already exist for %s; skipping.", pname)
+                continue
+
             start_r, end_r = Raster(sp), Raster(ep)
+
             inv_s = IsNull(start_r) | (start_r < 0) | (start_r > 100)
             inv_e = IsNull(end_r)   | (end_r   < 0) | (end_r   > 100)
-            s_ok  = SetNull(inv_s, start_r)
-            e_ok  = SetNull(inv_e, end_r)
+            s_small = start_r <= min_base
 
-            dpp = SetNull(IsNull(s_ok) | IsNull(e_ok), e_ok - s_ok)
-            dpp = Con(dpp < -100, -100, Con(dpp > 100, 100, dpp))
+            s_ok = SetNull(inv_s | s_small, start_r)
+            e_ok = SetNull(inv_e,          end_r)
 
-            out_change   = os.path.join(cfg.NLCD_TCC_CHANGE_DIR, f"nlcd_tcc_change_{pname}.tif")
-            out_severity = os.path.join(cfg.NLCD_HARVEST_SEVERITY_DIR, f"nlcd_tcc_severity_{pname}.tif")
+            pct = SetNull(IsNull(s_ok) | IsNull(e_ok), Float((e_ok - s_ok) / s_ok * 100))
+            pct = Con(pct < -100, -100, Con(pct > 100, 100, pct))
 
-            if getattr(cfg, "WRITE_PP_CHANGE", True):
-                _save_tif(Int(dpp), out_change, "16_BIT_SIGNED")
-                logging.info("Saved pp change => %s", out_change)
+            if write_change:
+                if SAVE_PCT_AS_INT16:
+                    if _save_tif(Int(pct * PCT_SCALE), out_change, "16_BIT_SIGNED"):
+                        logging.info("Saved percent change INT16 (scale=%s) => %s", PCT_SCALE, out_change)
+                else:
+                    if _save_tif(pct, out_change, "32_BIT_FLOAT"):
+                        logging.info("Saved percent change FLOAT32 => %s", out_change)
             else:
-                logging.info("WRITE_PP_CHANGE=False; skipping write of %s", out_change)
+                logging.info("WRITE_PCT_CHANGE=False; skipping write of %s", out_change)
 
-            loss = Con(dpp < 0, Abs(dpp), 0)
+            loss = Con(pct < 0, Abs(pct), 0)
             sev  = _classify_loss(loss)
-            _save_tif(sev, out_severity, "8_BIT_UNSIGNED")
-            logging.info("Saved pp-based severity => %s", out_severity)
-        logging.info("Completed pp-change processing.")
+            if _save_tif(sev, out_severity, "8_BIT_UNSIGNED"):
+                logging.info("Saved percent-based severity => %s", out_severity)
+
+        logging.info("Completed percent-change processing.")
     finally:
         arcpy.CheckInExtension("Spatial")
 
