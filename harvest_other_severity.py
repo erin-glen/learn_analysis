@@ -24,8 +24,7 @@ def _save_tif(ras, out_tif, pixel_type):
             arcpy.management.Delete(out_tif)
     except Exception:
         pass
-    with arcpy.EnvManager(compression="LZW", pyramid="NONE"):
-        arcpy.management.CopyRaster(ras, out_tif, pixel_type=pixel_type, format="TIFF")
+    arcpy.management.CopyRaster(ras, out_tif, pixel_type=pixel_type, format="TIFF")
     if getattr(cfg, "COMPUTE_OUTPUT_STATS", False):
         try:
             arcpy.management.CalculateStatistics(out_tif)
