@@ -31,6 +31,16 @@ learn_analysis/
 
 ```
 
+## Tree Canopy Preprocessing
+
+The script `batch_project_tree_canopy.py` can project a folder of NLCD tree
+canopy rasters to match the CRS and alignment of an existing target raster. The
+projected files are written to the same directory name with `_project` appended.
+
+```bash
+python batch_project_tree_canopy.py /path/to/rasters target.tif
+```
+
 ## Methodological Details
 
 Detailed methodology, including activity data preparation, emissions and removals calculation, and integration of geospatial datasets, are comprehensively described in Sections 2.3 and 2.4 of our publication.
