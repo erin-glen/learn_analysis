@@ -1,14 +1,18 @@
 # final_disturbance.py
 """
 Combines fire, insect, and harvest rasters via CellStatistics (MAX).
-Saves to the centralized NLCD_harvest_severity structure with LZW compression.
+Builds final outputs for BOTH harvest methods (absolute & percent) in one run,
+writing compressed (LZW) GeoTIFFs into the centralized NLCD_harvest_severity
+folder structure.
 
 Final codes:
   1–4 : Harvest severity (as provided by the chosen harvest workflow)
-  5   : Insect/Disease presence (presence -> 5, else 0)
-  10  : Fire presence (after masking low-severity fire code if enabled) (presence -> 10, else 0)
+  5   : Insect/Disease presence  (presence -> 5, else 0)
+  10  : Fire presence            (presence -> 10, else 0; low fire severity masked pre-combine if enabled)
 
-Also exports a “harvest_counted” layer = harvest after masking out any fire/insect.
+Also exports a “harvest_counted” layer per method:
+  harvest_counted_{method_tag}_{period}.tif
+= Harvest (1–4) after masking out any fire/insect (keeps only what will be counted as harvest).
 """
 
 import os
@@ -17,6 +21,12 @@ import logging
 import arcpy
 from arcpy.sa import *  # noqa
 import disturbance_config as cfg
+
+# Which harvest workflows to build finals for (defaults to abs & percent)
+FINAL_HARVEST_WORKFLOWS = getattr(
+    cfg, "FINAL_HARVEST_WORKFLOWS",
+    ["nlcd_tcc_severity", "nlcd_tcc_percent_severity"]
+)
 
 def _exists(p): return bool(p) and (arcpy.Exists(p) or os.path.exists(p))
 
@@ -94,7 +104,7 @@ def _warn_if_misaligned(path, ref_path, label):
         pass
 
 def main():
-    logging.info("Starting final_disturbance.py...")
+    logging.info("Starting final_disturbance.py... (building: %s)", ", ".join(FINAL_HARVEST_WORKFLOWS))
 
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
@@ -109,135 +119,111 @@ def main():
     _set_env_from_dataset(cfg.NLCD_RASTER)
     _log_grid_info("REF", cfg.NLCD_RASTER)
 
-    hcfg = cfg.harvest_product_config()
-    method_tag = hcfg.get("method_tag", "abs")
-    logging.info("Using harvest workflow '%s' => %s", cfg.HARVEST_WORKFLOW, hcfg.get("description", ""))
-
-    final_out_dir = cfg.final_combined_dir()
+    final_out_dir = cfg.final_combined_dir()  # same centralized folder for all methods
     os.makedirs(final_out_dir, exist_ok=True)
-    logging.info("Final combined rasters => %s", final_out_dir)
+    logging.info("Final combined rasters directory => %s", final_out_dir)
 
-    processed, skipped = [], []
+    # Summary accumulators
+    processed = {wf: [] for wf in FINAL_HARVEST_WORKFLOWS}
+    skipped   = {wf: [] for wf in FINAL_HARVEST_WORKFLOWS}
 
     for period in cfg.TIME_PERIODS.keys():
+        # Common inputs for all methods
         fire_path   = os.path.join(cfg.FIRE_OUTPUT_DIR,   f"fire_{period}.tif")
         insect_path = os.path.join(cfg.INSECT_FINAL_DIR,  f"insect_damage_{period}.tif")
-        harvest_path= cfg.harvest_raster_path(period)
 
-        inputs = {"fire": fire_path, "insect": insect_path, "harvest": harvest_path}
-        missing = [k for k, v in inputs.items() if not _exists(v)]
-        if missing:
-            lines = [f"Input status for period={period}:"]
-            for name, p in inputs.items():
-                lines.append(f"  - {name:<7}: {p} [{'OK' if _exists(p) else 'MISSING'}]")
-            logging.warning("\n".join(lines))
-            logging.error("Skipping period=%s due to missing inputs: %s", period, ", ".join(missing))
-            skipped.append({"period": period, "reason": "missing inputs", "details": missing})
+        if not (_exists(fire_path) and _exists(insect_path)):
+            logging.error("Skipping all methods for %s — missing common inputs (fire/insect).", period)
+            logging.warning("  fire  : %s [%s]", fire_path, "OK" if _exists(fire_path) else "MISSING")
+            logging.warning("  insect: %s [%s]", insect_path, "OK" if _exists(insect_path) else "MISSING")
+            for wf in FINAL_HARVEST_WORKFLOWS:
+                skipped[wf].append((period, "missing fire/insect"))
             continue
 
-        # Misalignment diagnostics (helps avoid hidden reprojection costs)
-        _warn_if_misaligned(fire_path,    cfg.NLCD_RASTER, "fire")
-        _warn_if_misaligned(insect_path,  cfg.NLCD_RASTER, "insect")
-        _warn_if_misaligned(harvest_path, cfg.NLCD_RASTER, "harvest")
+        # Misalignment diagnostics for common layers
+        _warn_if_misaligned(fire_path,   cfg.NLCD_RASTER, "fire")
+        _warn_if_misaligned(insect_path, cfg.NLCD_RASTER, "insect")
 
-        # Build output paths
-        out_combined     = os.path.join(final_out_dir,                        f"disturb_{method_tag}_{period}.tif")
-        out_harvest_only = os.path.join(cfg.NLCD_FINAL_HARVEST_ONLY_DIR,      f"harvest_counted_{method_tag}_{period}.tif")
-        out_insect       = os.path.join(cfg.NLCD_FINAL_INSECT_DIR,            f"insect_{period}.tif")
-        out_fire         = os.path.join(cfg.NLCD_FINAL_FIRE_DIR,              f"fire_{period}.tif")
-
-        need_combined     = not _exists(out_combined)
-        need_harvest_only = not _exists(out_harvest_only)
-        need_insect       = not _exists(out_insect)
-        need_fire         = not _exists(out_fire)
-
-        if not (need_combined or need_harvest_only or need_insect or need_fire):
-            logging.info("All final disturbance outputs already exist for %s; skipping.", period)
-            skipped.append({"period": period, "reason": "existing outputs",
-                            "details": [out_combined, out_harvest_only, out_insect, out_fire]})
-            continue
-
-        # Load inputs once
+        # Load & prepare fire/insect once per period
         t0 = time.perf_counter()
-        fire_ras   = Raster(fire_path)     if (need_combined or need_fire or need_harvest_only) else None
-        insect_ras = Raster(insect_path)   if (need_combined or need_insect or need_harvest_only) else None
-        harvest_ras= Raster(harvest_path)  if (need_combined or need_harvest_only) else None
-        logging.info("Loaded inputs for %s in %.1f s", period, time.perf_counter() - t0)
+        fire_ras   = Raster(fire_path)
+        insect_ras = Raster(insect_path)
+        logging.info("Loaded fire/insect for %s in %.1f s", period, time.perf_counter() - t0)
 
-        # Fire presence (10) and masking of low-severity fire (pre-combine)
-        fire_final = None
-        if (need_combined or need_fire or need_harvest_only) and fire_ras is not None:
-            t1 = time.perf_counter()
-            fire_masked = _mask_low_severity_fire(fire_ras)
-            fire_final  = Con(fire_masked > 0, 10, 0)
-            logging.info("Prepared fire presence for %s in %.1f s", period, time.perf_counter() - t1)
+        # Fire presence: mask low-sev fire, recode presence -> 10
+        t1 = time.perf_counter()
+        fire_masked = _mask_low_severity_fire(fire_ras)
+        fire_final  = Con(fire_masked > 0, 10, 0)
+        logging.info("Prepared fire presence for %s in %.1f s", period, time.perf_counter() - t1)
 
-        # Insect presence (5)
-        insect_final = None
-        if (need_combined or need_insect or need_harvest_only) and insect_ras is not None:
-            t2 = time.perf_counter()
-            insect_final = Con(insect_ras > 0, 5, 0)
-            logging.info("Prepared insect presence for %s in %.1f s", period, time.perf_counter() - t2)
+        # Insect presence: presence -> 5
+        t2 = time.perf_counter()
+        insect_final = Con(insect_ras > 0, 5, 0)
+        logging.info("Prepared insect presence for %s in %.1f s", period, time.perf_counter() - t2)
 
-        wrote_any = False
+        # Save presence exports (shared by both methods) if missing
+        out_insect = os.path.join(cfg.NLCD_FINAL_INSECT_DIR, f"insect_{period}.tif")
+        out_fire   = os.path.join(cfg.NLCD_FINAL_FIRE_DIR,   f"fire_{period}.tif")
+        if _save_byte_tif(insect_final, out_insect, lzw=True):
+            logging.info("Saved insect presence => %s", out_insect)
+        if _save_byte_tif(fire_final, out_fire, lzw=True):
+            logging.info("Saved fire presence => %s", out_fire)
 
-        # Combined MAX only if needed
-        if need_combined:
-            t3 = time.perf_counter()
-            combined_max = CellStatistics([r for r in (fire_final, insect_final, harvest_ras) if r is not None],
-                                          "MAXIMUM", "DATA")
-            logging.info("Computed combined MAX for %s in %.1f s", period, time.perf_counter() - t3)
-            t4 = time.perf_counter()
-            if _save_byte_tif(combined_max, out_combined, lzw=True):
-                logging.info("Final combined disturbance => %s (%.1f s)", out_combined, time.perf_counter() - t4)
-                wrote_any = True
+        # Now build finals for each requested harvest workflow
+        for wf in FINAL_HARVEST_WORKFLOWS:
+            hcfg = cfg.harvest_product_config(wf)
+            method_tag = hcfg.get("method_tag", "abs")  # 'abs' or 'pct' (or 'hansen' if used)
+            harvest_path = cfg.harvest_raster_path(period, workflow=wf)
 
-        # Harvest counted (mask out any fire/insect)
-        if need_harvest_only:
-            t5 = time.perf_counter()
-            harvest_counted = Con(((fire_final if fire_final is not None else 0) > 0) |
-                                  ((insect_final if insect_final is not None else 0) > 0),
-                                  0, harvest_ras)
-            logging.info("Computed harvest_counted for %s in %.1f s", period, time.perf_counter() - t5)
-            t6 = time.perf_counter()
-            if _save_byte_tif(harvest_counted, out_harvest_only, lzw=True):
-                logging.info("Harvest counted (masked by fire/insect) => %s (%.1f s)",
-                             out_harvest_only, time.perf_counter() - t6)
-                wrote_any = True
+            if not _exists(harvest_path):
+                logging.error("Skipping %s for %s — missing harvest raster: %s", wf, period, harvest_path)
+                skipped[wf].append((period, "missing harvest"))
+                continue
 
-        # Convenience presence exports
-        if need_insect and insect_final is not None:
-            t7 = time.perf_counter()
-            if _save_byte_tif(insect_final, out_insect, lzw=True):
-                logging.info("Saved insect presence => %s (%.1f s)", out_insect, time.perf_counter() - t7)
-                wrote_any = True
+            _warn_if_misaligned(harvest_path, cfg.NLCD_RASTER, f"harvest ({method_tag})")
 
-        if need_fire and fire_final is not None:
-            t8 = time.perf_counter()
-            if _save_byte_tif(fire_final, out_fire, lzw=True):
-                logging.info("Saved fire presence => %s (%.1f s)", out_fire, time.perf_counter() - t8)
-                wrote_any = True
+            # Output paths for this method
+            out_combined     = os.path.join(final_out_dir,                   f"disturb_{method_tag}_{period}.tif")
+            out_harvest_only = os.path.join(cfg.NLCD_FINAL_HARVEST_ONLY_DIR, f"harvest_counted_{method_tag}_{period}.tif")
 
-        if wrote_any:
-            processed.append(period)
-        else:
-            skipped.append({"period": period, "reason": "existing outputs",
-                            "details": [out_combined, out_harvest_only, out_insect, out_fire]})
+            need_combined     = not _exists(out_combined)
+            need_harvest_only = not _exists(out_harvest_only)
 
-    logging.info("Run summary -> processed: %d, skipped: %d", len(processed), len(skipped))
-    if processed:
-        logging.info("Processed periods: %s", ", ".join(processed))
-    if skipped:
-        for item in skipped:
-            reason = item.get("reason", "unknown reason")
-            period = item.get("period")
-            details = item.get("details")
-            if reason == "missing inputs" and details:
-                logging.warning("Skipped %s (missing: %s)", period, ", ".join(details))
-            elif reason == "existing outputs":
-                logging.info("Skipped %s (all outputs already exist)", period)
-            else:
-                logging.info("Skipped %s (%s)", period, reason)
+            if not (need_combined or need_harvest_only):
+                logging.info("Finals already exist for %s (%s); skipping.", period, method_tag)
+                skipped[wf].append((period, "existing outputs"))
+                continue
+
+            harvest_ras = Raster(harvest_path)
+
+            # Combined MAX (DATA): [fire=10, insect=5, harvest=1..4]
+            if need_combined:
+                t3 = time.perf_counter()
+                combined_max = CellStatistics([fire_final, insect_final, harvest_ras], "MAXIMUM", "DATA")
+                logging.info("Computed combined MAX for %s (%s) in %.1f s", period, method_tag, time.perf_counter() - t3)
+                t4 = time.perf_counter()
+                if _save_byte_tif(combined_max, out_combined, lzw=True):
+                    logging.info("Final combined disturbance => %s (%.1f s)", out_combined, time.perf_counter() - t4)
+
+            # What counts as harvest after masking out fire/insect (keep only 1..4 where fire/insect == 0)
+            if need_harvest_only:
+                t5 = time.perf_counter()
+                harvest_counted = Con((fire_final > 0) | (insect_final > 0), 0, harvest_ras)
+                logging.info("Computed harvest_counted for %s (%s) in %.1f s", period, method_tag, time.perf_counter() - t5)
+                t6 = time.perf_counter()
+                if _save_byte_tif(harvest_counted, out_harvest_only, lzw=True):
+                    logging.info("Harvest counted (masked by fire/insect) => %s (%.1f s)", out_harvest_only, time.perf_counter() - t6)
+
+            processed[wf].append(period)
+
+    # -------- Summary --------
+    for wf in FINAL_HARVEST_WORKFLOWS:
+        ok = processed[wf]; sk = skipped[wf]
+        logging.info("Workflow '%s' summary -> processed: %d, skipped: %d", wf, len(ok), len(sk))
+        if ok:
+            logging.info("  Processed periods: %s", ", ".join(ok))
+        for p, reason in sk:
+            logging.info("  Skipped %s (%s)", p, reason)
 
     arcpy.CheckInExtension("Spatial")
     logging.info("final_disturbance.py completed.")
