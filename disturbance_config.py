@@ -114,9 +114,7 @@ NLCD_FINAL_FIRE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "10")
 
 # NLCD TCC-based derivations (not masked by other layers)
 NLCD_TCC_CHANGE_DIR       = os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_change")       # absolute pp change
-NLCD_TCC_PCT_CHANGE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_pct_change")   # percent change
 NLCD_HARVEST_SEVERITY_DIR = os.path.join(NLCD_HARVEST_ROOT, "Harvest_severity")         # pp-based severity (0–4)
-NLCD_HARVEST_PCT_SEV_DIR  = os.path.join(NLCD_HARVEST_ROOT, "Harvest_pct_severity")     # pct-based severity (0–4)
 
 for _d in [
     NLCD_HARVEST_ROOT,
@@ -125,9 +123,7 @@ for _d in [
     NLCD_FINAL_INSECT_DIR,
     NLCD_FINAL_FIRE_DIR,
     NLCD_TCC_CHANGE_DIR,
-    NLCD_TCC_PCT_CHANGE_DIR,
     NLCD_HARVEST_SEVERITY_DIR,
-    NLCD_HARVEST_PCT_SEV_DIR,
 ]:
     os.makedirs(_d, exist_ok=True)
 
@@ -137,12 +133,6 @@ for _d in [
 # Severity thresholds (upper bounds) for pp-based severity 1–4
 NLCD_TCC_SEVERITY_BREAKS = [25, 50, 75, 100]
 
-# Percent-based severity thresholds (falls back to pp thresholds if not set)
-NLCD_TCC_PCT_SEVERITY_BREAKS = [25, 50, 75, 100]
-
-# Minimum starting canopy (%) for percent change to avoid unstable ratios
-NLCD_TCC_PCT_MIN_BASE = 0  # e.g., set to 1 or 5 if desired
-
 # Fire masking (preserve harvest=3 downstream)
 MASK_LOW_SEVERITY_FIRE = True
 FIRE_LOW_SEVERITY_CODE = 3
@@ -151,7 +141,6 @@ FIRE_LOW_SEVERITY_CODE = 3
 PARALLEL_PROCESSING_FACTOR = "90%"  # "100%" or integer cores, e.g., "8"
 COMPUTE_OUTPUT_STATS = False        # avoid CalculateStatistics for speed
 WRITE_PP_CHANGE = True              # write nlcd_tcc_change_*.tif
-WRITE_PCT_CHANGE = True             # write nlcd_tcc_pct_change_*.tif
 SCRATCH_WORKSPACE = r""             # e.g., r"D:\arcgis_scratch" on a fast SSD
 
 # --------------------------------------------------------------------
@@ -160,7 +149,6 @@ SCRATCH_WORKSPACE = r""             # e.g., r"D:\arcgis_scratch" on a fast SSD
 # Supported:
 #   * "hansen"                    => legacy Hansen harvest
 #   * "nlcd_tcc_severity"         => NLCD TCC pp-based severity (recommended)
-#   * "nlcd_tcc_percent_severity" => NLCD TCC percent-based severity
 HARVEST_WORKFLOW = "nlcd_tcc_severity"
 
 HARVEST_PRODUCTS = {
@@ -178,13 +166,6 @@ HARVEST_PRODUCTS = {
         "raster_template": "nlcd_tcc_severity_{period}.tif",
         "method_tag": "abs",
     },
-    "nlcd_tcc_percent_severity": {
-        "module": "harvest_other_severity_percent",
-        "description": "NLCD Tree Canopy Cover percent-change severity",
-        "raster_directory": NLCD_HARVEST_PCT_SEV_DIR,
-        "raster_template": "nlcd_tcc_pct_severity_{period}.tif",
-        "method_tag": "pct",
-    },
 }
 
 def harvest_product_config(workflow: str | None = None):
@@ -198,7 +179,7 @@ def harvest_raster_path(period_name: str, workflow: str | None = None) -> str:
     return os.path.join(cfg_["raster_directory"], cfg_["raster_template"].format(period=period_name))
 
 def final_combined_dir(workflow: str | None = None) -> str:
-    # All methods write combined finals here; method appears in filename (disturb_{abs|pct|hansen}_{period}.tif)
+    # All methods write combined finals here; method appears in filename (disturb_{abs|hansen}_{period}.tif)
     return NLCD_FINAL_DIR
 
 # --------------------------------------------------------------------
