@@ -18,12 +18,23 @@ logging.basicConfig(
 # --------------------------------------------------------------------
 BASE_DIR = r"C:\GIS\Data\LEARN\Disturbances"
 
+# --------------------------------------------------------------------
+# NLCD ANALYSIS YEARS (canonical endpoints for standard NLCD periods)
+# --------------------------------------------------------------------
+# Standard NLCD endpoints you want covered across the workflow.
+# Periods are adjacent pairs: 2001_2004, 2004_2006, ..., 2021_2023
+NLCD_ANALYSIS_YEARS = [2001, 2004, 2006, 2008, 2011, 2013, 2016, 2019, 2021, 2023]
+
+# --------------------------------------------------------------------
 # Insect/Disease
+# --------------------------------------------------------------------
 INSECT_GDB_DIR = os.path.join(BASE_DIR, "ADS")
 INSECT_OUTPUT_DIR = os.path.join(INSECT_GDB_DIR, "Processed")
 INSECT_FINAL_DIR = os.path.join(INSECT_GDB_DIR, "Final")
 
+# --------------------------------------------------------------------
 # Hansen (Hansen Global Forest Change harvest proxy)
+# --------------------------------------------------------------------
 HANSEN_INPUT_DIR = os.path.join(BASE_DIR, "Hansen")
 HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
 
@@ -34,8 +45,8 @@ HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
 NLCD_TCC_INPUT_DIR = r"C:\GIS\Data\LEARN\SourceData\TreeCanopy\NLCD_v2023-5_project"
 NLCD_TCC_INPUT_DIR_FALLBACK = r"C:\GIS\Data\LEARN\SourceData\TreeCanopy\NLCD_Project"
 
-# Candidate years (extend if you add more)
-NLCD_TCC_YEARS = [2011, 2013, 2016, 2019, 2021, 2023]
+# Candidate years (canonical NLCD endpoints)
+NLCD_TCC_YEARS = NLCD_ANALYSIS_YEARS
 
 # Exact filename patterns
 NLCD_TCC_FILENAME_FMT = "nlcd_tcc_conus_wgs84_v2023-5_20230101_{year}1231_projected.tif"
@@ -52,11 +63,13 @@ def _resolve_tcc_path(year: int) -> str:
     for p in _tcc_candidates(year):
         if os.path.exists(p):
             return p
+
     # Fuzzy search (helps if filenames differ slightly)
     for base in [NLCD_TCC_INPUT_DIR, NLCD_TCC_INPUT_DIR_FALLBACK]:
         hits = glob.glob(os.path.join(base, f"*{year}*tcc*projected*.tif"))
         if hits:
             return hits[0]
+
     # Return the primary expected path (even if missing) so callers can warn/skip gracefully
     return _tcc_candidates(year)[0]
 
@@ -72,7 +85,7 @@ if _missing_tcc:
 # --------------------------------------------------------------------
 NLCD_LC_DIR = r"C:\GIS\Data\LEARN\SourceData\NEW_NLCD"
 NLCD_LC_FILENAME_FMT = "Annual_NLCD_LndCov_{year}_CU_C1V0.tif"
-NLCD_LC_YEARS = [2011, 2013, 2016, 2019, 2021, 2023]  # extend if needed
+NLCD_LC_YEARS = NLCD_ANALYSIS_YEARS  # expanded to include 2001/2004/2006/2008, etc.
 
 def nlcd_lc_path(year: int) -> str:
     return os.path.join(NLCD_LC_DIR, NLCD_LC_FILENAME_FMT.format(year=year))
@@ -191,8 +204,12 @@ def final_combined_dir(workflow: str | None = None) -> str:
 # --------------------------------------------------------------------
 # FIRE
 # --------------------------------------------------------------------
-FIRE_ROOT = os.path.join(BASE_DIR, "Fire", "Raw", "composite_data", "MTBS_BSmosaics")
-FIRE_OUTPUT_DIR = os.path.join(BASE_DIR, "Fire", "Processed")
+# Expected raw layout:
+#   <BASE_DIR>\Fire\Raw\<year>\mtbs_CONUS_<year>\mtbs_CONUS_<year>.tif
+FIRE_DIR = os.path.join(BASE_DIR, "Fire")
+FIRE_ROOT = FIRE_DIR  # back-compat symbol; points to Fire base
+FIRE_RAW_DIR = os.path.join(FIRE_DIR, "Raw")
+FIRE_OUTPUT_DIR = os.path.join(FIRE_DIR, "Processed")
 
 # --------------------------------------------------------------------
 # LEGACY OUTPUT ROOTS (back-compat)
@@ -202,8 +219,14 @@ FINAL_COMBINED_ROOT_DIR = os.path.join(BASE_DIR, "FinalCombined")
 # Keep legacy symbol pointing to the new final directory for compatibility
 FINAL_COMBINED_DIR = NLCD_FINAL_DIR
 
-for _d in [INSECT_OUTPUT_DIR, INSECT_FINAL_DIR, HANSEN_OUTPUT_DIR, FIRE_OUTPUT_DIR,
-           INTERMEDIATE_COMBINED_DIR, FINAL_COMBINED_ROOT_DIR]:
+for _d in [
+    INSECT_OUTPUT_DIR,
+    INSECT_FINAL_DIR,
+    HANSEN_OUTPUT_DIR,
+    FIRE_OUTPUT_DIR,
+    INTERMEDIATE_COMBINED_DIR,
+    FINAL_COMBINED_ROOT_DIR,
+]:
     os.makedirs(_d, exist_ok=True)
 
 # --------------------------------------------------------------------
@@ -212,9 +235,9 @@ for _d in [INSECT_OUTPUT_DIR, INSECT_FINAL_DIR, HANSEN_OUTPUT_DIR, FIRE_OUTPUT_D
 REGIONS = [1, 2, 3, 4, 6, 8, 9]
 
 def _available_tcc_years() -> List[int]:
-    """Years with resolvable TCC rasters on disk."""
+    """Years with resolvable TCC rasters on disk (within NLCD_ANALYSIS_YEARS)."""
     yrs: List[int] = []
-    for y in sorted(NLCD_TCC_YEARS):
+    for y in NLCD_ANALYSIS_YEARS:
         p = NLCD_TCC_RASTERS.get(y)
         if p and os.path.exists(p):
             yrs.append(y)
@@ -224,20 +247,53 @@ def _available_tcc_years() -> List[int]:
         logging.info("Available TCC years on disk: %s", yrs)
     return yrs
 
-def _build_adjacent_periods(yrs: Sequence[int]) -> dict:
-    """Build adjacent periods only where both endpoints exist."""
+def _build_adjacent_periods_from_endpoints(endpoints: Sequence[int]) -> dict[str, list[int]]:
+    """
+    Build standard adjacent periods from the canonical NLCD endpoints, but ONLY include
+    a period if BOTH endpoint TCC rasters exist on disk.
+
+    Example endpoints:
+      2001, 2004, 2006, 2008, 2011, 2013, 2016, 2019, 2021, 2023
+
+    Candidate periods:
+      2001_2004, 2004_2006, ..., 2021_2023
+    """
     periods: dict[str, list[int]] = {}
-    for a, b in zip(yrs, yrs[1:]):
-        if os.path.exists(NLCD_TCC_RASTERS.get(a, "")) and os.path.exists(NLCD_TCC_RASTERS.get(b, "")):
+    for a, b in zip(endpoints, endpoints[1:]):
+        a_path = NLCD_TCC_RASTERS.get(a, "")
+        b_path = NLCD_TCC_RASTERS.get(b, "")
+        if os.path.exists(a_path) and os.path.exists(b_path):
             periods[f"{a}_{b}"] = [a, b]
+
     if not periods:
-        logging.warning("No adjacent TCC periods could be built from: %s", yrs)
+        logging.warning("No adjacent TCC periods could be built from endpoints: %s", list(endpoints))
     else:
         logging.info("Discovered TCC periods: %s", ", ".join(periods.keys()))
     return periods
 
-# Auto-generate TIME_PERIODS from available TCC years
-TIME_PERIODS = _build_adjacent_periods(_available_tcc_years())
+def _expand_period_endpoints_to_years(period_endpoints: dict[str, list[int]]) -> dict[str, list[int]]:
+    """
+    Expand endpoint pairs [a, b] into inclusive year lists [a, a+1, ..., b].
+    This is intended for annual datasets like MTBS fire.
+    """
+    expanded: dict[str, list[int]] = {}
+    for period_name, years in period_endpoints.items():
+        if not years or len(years) < 2:
+            continue
+        a, b = int(years[0]), int(years[-1])
+        expanded[period_name] = list(range(a, b + 1))
+    return expanded
+
+# Log what's available on disk
+_available_tcc_years()
+
+# TIME_PERIODS (TCC-gated): used by TCC-based workflows (harvest severity)
+TIME_PERIODS = _build_adjacent_periods_from_endpoints(NLCD_ANALYSIS_YEARS)
+
+# FIRE_TIME_PERIODS (always): all NLCD periods, expanded to full year lists
+# Example: "2001_2004": [2001, 2002, 2003, 2004]
+_FIRE_PERIOD_ENDPOINTS = {f"{a}_{b}": [a, b] for a, b in zip(NLCD_ANALYSIS_YEARS, NLCD_ANALYSIS_YEARS[1:])}
+FIRE_TIME_PERIODS = _expand_period_endpoints_to_years(_FIRE_PERIOD_ENDPOINTS)
 
 # --------------------------------------------------------------------
 # HANSEN TILES
