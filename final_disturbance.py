@@ -172,7 +172,7 @@ def main():
         # Now build finals for each requested harvest workflow
         for wf in FINAL_HARVEST_WORKFLOWS:
             hcfg = cfg.harvest_product_config(wf)
-            method_tag = hcfg.get("method_tag", "abs")  # 'abs' or 'pct' (or 'hansen' if used)
+            method_tag = hcfg.get("method_tag", "abs")  # 'abs' (or 'hansen' if used)
             harvest_path = cfg.harvest_raster_path(period, workflow=wf)
 
             if not _exists(harvest_path):
