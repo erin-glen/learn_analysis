@@ -137,7 +137,7 @@ def main(tile_ids: Iterable[str] | None = None):
     logging.info("Extracting inventory periods from Hansen reprojected mosaic...")
 
     h = Raster(hansen_mosaic_reproj)
-    for period_name, years in cfg.TIME_PERIODS.items():
+    for period_name, years in cfg.TIME_PERIODS_ALL.items():
         out_raster = os.path.join(cfg.HANSEN_OUTPUT_DIR, f"hansen_{period_name}.tif")
 
         # Check if output for this period already exists

@@ -33,7 +33,8 @@ def main():
     arcpy.env.cellSize = cfg.NLCD_RASTER
     arcpy.env.outputCoordinateSystem = cfg.NLCD_RASTER
 
-    for period in cfg.TIME_PERIODS.keys():
+    periods = getattr(cfg, "INSECT_TIME_PERIODS", cfg.TIME_PERIODS_ALL).keys()
+    for period in periods:
         # Final mosaic for this time period
         out_name = f"insect_damage_{period}.tif"
         out_path = os.path.join(cfg.INSECT_FINAL_DIR, out_name)

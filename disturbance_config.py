@@ -287,13 +287,21 @@ def _expand_period_endpoints_to_years(period_endpoints: dict[str, list[int]]) ->
 # Log what's available on disk
 _available_tcc_years()
 
-# TIME_PERIODS (TCC-gated): used by TCC-based workflows (harvest severity)
-TIME_PERIODS = _build_adjacent_periods_from_endpoints(NLCD_ANALYSIS_YEARS)
+# TIME_PERIODS_ALL: standard adjacent endpoints regardless of TCC availability
+TIME_PERIODS_ALL = {f"{a}_{b}": [a, b] for a, b in zip(NLCD_ANALYSIS_YEARS, NLCD_ANALYSIS_YEARS[1:])}
+
+# TIME_PERIODS_TCC (TCC-gated): used by TCC-based workflows (harvest severity)
+TIME_PERIODS_TCC = _build_adjacent_periods_from_endpoints(NLCD_ANALYSIS_YEARS)
+
+# Back-compat: TIME_PERIODS remains TCC-gated for existing callers
+TIME_PERIODS = TIME_PERIODS_TCC
 
 # FIRE_TIME_PERIODS (always): all NLCD periods, expanded to full year lists
 # Example: "2001_2004": [2001, 2002, 2003, 2004]
-_FIRE_PERIOD_ENDPOINTS = {f"{a}_{b}": [a, b] for a, b in zip(NLCD_ANALYSIS_YEARS, NLCD_ANALYSIS_YEARS[1:])}
-FIRE_TIME_PERIODS = _expand_period_endpoints_to_years(_FIRE_PERIOD_ENDPOINTS)
+FIRE_TIME_PERIODS = _expand_period_endpoints_to_years(TIME_PERIODS_ALL)
+
+# Insect/disease periods (merge) default to the full adjacent endpoint set
+INSECT_TIME_PERIODS = TIME_PERIODS_ALL
 
 # --------------------------------------------------------------------
 # HANSEN TILES
