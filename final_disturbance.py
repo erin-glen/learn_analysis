@@ -6,7 +6,7 @@ writing compressed (LZW) GeoTIFFs into the centralized NLCD_harvest_severity
 folder structure.
 
 Final codes:
-  1–4 : Harvest severity (as provided by the chosen harvest workflow)
+  1–4 : Harvest severity (as provided by the chosen harvest workflow; Hansen is binary=1)
   5   : Insect/Disease presence  (presence -> 5, else 0)
   10  : Fire presence            (presence -> 10, else 0; low fire severity masked pre-combine if enabled)
 
@@ -127,7 +127,7 @@ def main():
     processed = {wf: [] for wf in FINAL_HARVEST_WORKFLOWS}
     skipped   = {wf: [] for wf in FINAL_HARVEST_WORKFLOWS}
 
-    for period in cfg.TIME_PERIODS.keys():
+    for period in cfg.TIME_PERIODS_ALL.keys():
         # Common inputs for all methods
         fire_path   = os.path.join(cfg.FIRE_OUTPUT_DIR,   f"fire_{period}.tif")
         insect_path = os.path.join(cfg.INSECT_FINAL_DIR,  f"insect_damage_{period}.tif")

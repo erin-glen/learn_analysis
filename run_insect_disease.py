@@ -18,10 +18,10 @@ import logging
 import subprocess
 import sys
 
-# Hardcoded time periods to process:
-HARDCODED_PERIODS = [
-    "2019_2021"
-]
+import disturbance_config as cfg
+
+# Time periods to process (default to all adjacent NLCD endpoints).
+HARDCODED_PERIODS = list(getattr(cfg, "INSECT_TIME_PERIODS", cfg.TIME_PERIODS_ALL).keys())
 
 logging.basicConfig(
     level=logging.INFO,
