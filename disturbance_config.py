@@ -213,7 +213,7 @@ for _d in [
 # --------------------------------------------------------------------
 # REGIONS & TIME PERIODS
 # --------------------------------------------------------------------
-REGIONS = [1, 2, 3, 4, 6, 8, 9]
+REGIONS = [1, 2, 3, 4, 5, 6, 8, 9]
 
 def _available_tcc_years() -> List[int]:
     """Years with resolvable TCC rasters on disk (within NLCD_ANALYSIS_YEARS)."""
