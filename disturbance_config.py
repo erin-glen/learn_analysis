@@ -29,6 +29,7 @@ NLCD_ANALYSIS_YEARS = [2001, 2004, 2006, 2008, 2011, 2013, 2016, 2019, 2021, 202
 # Insect/Disease
 # --------------------------------------------------------------------
 INSECT_GDB_DIR = os.path.join(BASE_DIR, "ADS")
+INSECT_RAW_DIR = os.path.join(INSECT_GDB_DIR, "Raw")
 INSECT_OUTPUT_DIR = os.path.join(INSECT_GDB_DIR, "Processed")
 INSECT_FINAL_DIR = os.path.join(INSECT_GDB_DIR, "Final")
 
