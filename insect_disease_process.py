@@ -19,47 +19,28 @@ import argparse
 import rasterio
 import disturbance_config as cfg
 
-def main():
+def _process_period(period: str):
     """
-    1) Parse --period argument (e.g. '2019_2021').
-    2) Convert that period string into a list of years [2019, 2020, 2021].
-    3) For each region in cfg.REGIONS, extract features from the GDB for those years.
-    4) Rasterize and save output as: insect_damage_{region}_{period}.tif
+    1) Convert the period string into a list of years [2019, 2020, 2021].
+    2) For each region in cfg.REGIONS, extract features from the GDB for those years.
+    3) Rasterize and save output as: insect_damage_{region}_{period}.tif
     """
-
-    # ---------------------------------------------------------
-    # 1. Parse Command-Line Argument: e.g. --period 2019_2021
-    # ---------------------------------------------------------
-    parser = argparse.ArgumentParser(description="Run Insect/Disease processing for a single user-specified period.")
-    parser.add_argument(
-        "--period",
-        required=True,
-        help="Time period in the format 'YYYY_YYYY' (e.g. '2019_2021')."
-    )
-    args = parser.parse_args()
-
     # Parse the string "YYYY_YYYY" => [YYYY, YYYY+1, ..., YYYY2]
     try:
-        start_str, end_str = args.period.split("_")
+        start_str, end_str = period.split("_")
         start_year = int(start_str)
         end_year = int(end_str)
     except ValueError:
-        logging.error(f"Invalid --period '{args.period}'. Use format YYYY_YYYY, e.g. 2019_2021.")
-        sys.exit(1)
+        raise ValueError(f"Invalid period '{period}'. Use format YYYY_YYYY, e.g. 2019_2021.") from None
 
     if end_year < start_year:
-        logging.error(f"Invalid period range: {start_year} > {end_year}")
-        sys.exit(1)
+        raise ValueError(f"Invalid period range: {start_year} > {end_year}")
 
     # Build a list of years inclusive of start/end
     years = list(range(start_year, end_year + 1))
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
-    )
     logging.info("Insect/Disease Extraction Script Started.")
-    logging.info(f"Requested period: {args.period} => years={years}")
+    logging.info(f"Requested period: {period} => years={years}")
 
     # ---------------------------------------------------------
     # 2. Load NLCD metadata using rasterio
@@ -76,7 +57,7 @@ def main():
     # ---------------------------------------------------------
     for region in cfg.REGIONS:
         gdb_folder_name = f"CONUS_Region{region}_AllYears.gdb"
-        gdb_path = os.path.join(cfg.INSECT_GDB_DIR, gdb_folder_name, gdb_folder_name)
+        gdb_path = os.path.join(cfg.INSECT_RAW_DIR, gdb_folder_name, gdb_folder_name)
 
         if not os.path.exists(gdb_path):
             logging.warning(f"GDB not found for region={region}: {gdb_path}")
@@ -108,7 +89,7 @@ def main():
         # Output raster name will reflect the user-specified period
         output_raster = os.path.join(
             cfg.INSECT_OUTPUT_DIR,
-            f"insect_damage_{region}_{args.period}.tif"
+            f"insect_damage_{region}_{period}.tif"
         )
         if os.path.exists(output_raster):
             logging.info(f"Already exists: {output_raster}, skipping.")
@@ -128,7 +109,7 @@ def main():
         # 3A) Convert relevant features to a temp GPKG
         temp_vector = os.path.join(
             cfg.INSECT_OUTPUT_DIR,
-            f"temp_region{region}_{args.period}.gpkg"
+            f"temp_region{region}_{period}.gpkg"
         )
         if os.path.exists(temp_vector):
             os.remove(temp_vector)
@@ -144,14 +125,14 @@ def main():
         try:
             subprocess.run(ogr2ogr_cmd, check=True)
         except subprocess.CalledProcessError as e:
-            logging.error(f"Error ogr2ogr for region={region}, period={args.period}: {e}")
+            logging.error(f"Error ogr2ogr for region={region}, period={period}: {e}")
             continue
 
         # Check features
         check_cmd = ['ogrinfo', '-ro', '-al', '-so', temp_vector]
         result = subprocess.run(check_cmd, capture_output=True, text=True)
         if 'Feature Count: 0' in result.stdout:
-            logging.warning(f"No features found for region={region}, period={args.period}")
+            logging.warning(f"No features found for region={region}, period={period}")
             os.remove(temp_vector)
             continue
 
@@ -181,7 +162,39 @@ def main():
             if os.path.exists(temp_vector):
                 os.remove(temp_vector)
 
-    logging.info("All region-level insect/disease rasters created.")
+        logging.info("All region-level insect/disease rasters created.")
+
+
+def main():
+    """
+    Parse --period argument if provided; otherwise run for all configured periods.
+    """
+    parser = argparse.ArgumentParser(
+        description="Run Insect/Disease processing for a single user-specified period (or all periods)."
+    )
+    parser.add_argument(
+        "--period",
+        help="Time period in the format 'YYYY_YYYY' (e.g. '2019_2021')."
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+
+    periods = []
+    if args.period:
+        periods = [args.period]
+    else:
+        periods = list(getattr(cfg, "INSECT_TIME_PERIODS", cfg.TIME_PERIODS_ALL).keys())
+
+    for period in periods:
+        try:
+            _process_period(period)
+        except ValueError as exc:
+            logging.error(str(exc))
+            sys.exit(1)
 
 
 if __name__ == "__main__":
