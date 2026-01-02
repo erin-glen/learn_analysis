@@ -28,7 +28,10 @@ def _candidate_dirs() -> List[str]:
 def _iter_unprojected_rasters(search_dirs: Iterable[str]) -> Iterable[str]:
     for base in search_dirs:
         for path in glob.glob(os.path.join(base, "*.tif")):
-            if path.lower().endswith("_projected.tif"):
+            name = os.path.basename(path).lower()
+            if name.endswith("_projected.tif"):
+                continue
+            if "tcc" not in name:
                 continue
             yield path
 
@@ -38,12 +41,13 @@ def _projected_path(src_path: str) -> str:
     return f"{root}_projected{ext}"
 
 
-def _set_env(ref_path: str) -> None:
+def _set_env(ref_path: str) -> float:
     d = arcpy.Describe(ref_path)
     arcpy.env.snapRaster = ref_path
-    arcpy.env.cellSize = ref_path
+    arcpy.env.cellSize = d.meanCellWidth
     arcpy.env.extent = d.extent
     arcpy.env.outputCoordinateSystem = d.spatialReference
+    return float(d.meanCellWidth)
 
 
 def main() -> None:
@@ -53,7 +57,7 @@ def main() -> None:
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
 
-    _set_env(cfg.NLCD_RASTER)
+    cell_size = _set_env(cfg.NLCD_RASTER)
 
     input_dirs = _candidate_dirs()
     if not input_dirs:
@@ -78,7 +82,7 @@ def main() -> None:
             out_path,
             arcpy.env.outputCoordinateSystem,
             resampling_type="NEAREST",
-            cell_size=arcpy.env.cellSize,
+            cell_size=cell_size,
         )
 
     logging.info("Completed tree canopy reprojection.")
