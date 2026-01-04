@@ -50,7 +50,9 @@ NLCD_TCC_INPUT_DIR_FALLBACK = r"C:\GIS\Data\LEARN\SourceData\TreeCanopy\NLCD_Pro
 NLCD_TCC_YEARS = NLCD_ANALYSIS_YEARS
 
 # Exact filename patterns
-NLCD_TCC_FILENAME_FMT = "nlcd_tcc_conus_wgs84_v2023-5_20230101_{year}1231_projected.tif"
+# v2023-5 filenames include per-year date ranges, e.g.
+# nlcd_tcc_conus_wgs84_v2023-5_20010101_20011231_projected.tif
+NLCD_TCC_FILENAME_FMT = "nlcd_tcc_conus_wgs84_v2023-5_{year}0101_{year}1231_projected.tif"
 NLCD_TCC_FILENAME_FMT_FALLBACK = "nlcd_tcc_conus_{year}_v2021-4_projected.tif"
 
 def _tcc_candidates(year: int):
@@ -68,6 +70,8 @@ def _resolve_tcc_path(year: int) -> str:
     # Fuzzy search (helps if filenames differ slightly)
     for base in [NLCD_TCC_INPUT_DIR, NLCD_TCC_INPUT_DIR_FALLBACK]:
         hits = glob.glob(os.path.join(base, f"*{year}*tcc*projected*.tif"))
+        if not hits:
+            hits = glob.glob(os.path.join(base, f"*tcc*{year}*projected*.tif"))
         if hits:
             return hits[0]
 
