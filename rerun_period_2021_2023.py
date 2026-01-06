@@ -4,7 +4,8 @@ Rerun the disturbance pipeline for the 2021_2023 period only.
 
 This script:
   1) Limits processing to the 2021_2023 period.
-  2) Optionally deletes existing outputs for that period.
+  2) Optionally deletes existing outputs for that period (including TCC-derived
+     change/severity rasters so they are recomputed).
   3) Executes insect merge, harvest, fire, and final combine steps.
 """
 
@@ -81,9 +82,12 @@ def _clean_outputs() -> None:
         _delete_if_exists(out_combined)
         _delete_if_exists(out_harvest_only)
 
-        if workflow == "nlcd_tcc_severity":
+        if "nlcd_tcc" in workflow:
             _delete_if_exists(
                 os.path.join(cfg.NLCD_TCC_CHANGE_DIR, f"nlcd_tcc_change_{PERIOD}.tif")
+            )
+            _delete_if_exists(
+                os.path.join(cfg.NLCD_HARVEST_SEVERITY_DIR, f"nlcd_tcc_severity_{PERIOD}.tif")
             )
 
 
