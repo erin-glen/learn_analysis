@@ -171,6 +171,14 @@ HARVEST_PRODUCTS = {
         "raster_template": "nlcd_tcc_severity_{period}.tif",
         "method_tag": "abs",
     },
+    # Alias for legacy references; uses the pp-based severity outputs.
+    "nlcd_tcc_percent_severity": {
+        "module": "harvest_other_severity",
+        "description": "Alias of nlcd_tcc_severity (pp-based severity outputs)",
+        "raster_directory": NLCD_HARVEST_SEVERITY_DIR,
+        "raster_template": "nlcd_tcc_severity_{period}.tif",
+        "method_tag": "abs",
+    },
 }
 
 def harvest_product_config(workflow: str | None = None):
