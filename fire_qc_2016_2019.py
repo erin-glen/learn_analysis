@@ -64,6 +64,64 @@ def _log_counts(label: str, counts: dict[int, int]) -> None:
         logging.info("  %s value=%s count=%s", label, value, counts[value])
 
 
+def _grid_signature(path: str) -> dict[str, str]:
+    d = arcpy.Describe(path)
+    sr = getattr(d, "spatialReference", None)
+    extent = getattr(d, "extent", None)
+    return {
+        "width": str(getattr(d, "width", "?")),
+        "height": str(getattr(d, "height", "?")),
+        "cell_x": f"{getattr(d, 'meanCellWidth', '?')}",
+        "cell_y": f"{getattr(d, 'meanCellHeight', '?')}",
+        "sr": getattr(sr, "name", "Unknown") if sr else "Unknown",
+        "extent": str(extent) if extent else "Unknown",
+    }
+
+
+def _log_grid(tag: str, path: str) -> None:
+    try:
+        sig = _grid_signature(path)
+        logging.info(
+            "  %s grid: size=(%s x %s), cell=%s x %s, SR=%s, extent=%s",
+            tag,
+            sig["width"],
+            sig["height"],
+            sig["cell_x"],
+            sig["cell_y"],
+            sig["sr"],
+            sig["extent"],
+        )
+    except Exception as exc:
+        logging.warning("  %s grid: unable to read (%s)", tag, exc)
+
+
+def _warn_if_misaligned(path: str, ref_path: str, label: str) -> None:
+    try:
+        dp = arcpy.Describe(path)
+        dr = arcpy.Describe(ref_path)
+        sr_p = getattr(dp, "spatialReference", None)
+        sr_r = getattr(dr, "spatialReference", None)
+        cw_p, ch_p = dp.meanCellWidth, dp.meanCellHeight
+        cw_r, ch_r = dr.meanCellWidth, dr.meanCellHeight
+        if (not sr_p or not sr_r) or (sr_p.name != sr_r.name) or (abs(cw_p - cw_r) > 1e-6) or (abs(ch_p - ch_r) > 1e-6):
+            logging.warning(
+                "  Potential misalignment for %s:\n"
+                "    %s (cell %.6f x %.6f, SR=%s)\n"
+                "    REF=%s (cell %.6f x %.6f, SR=%s)",
+                label,
+                path,
+                cw_p,
+                ch_p,
+                getattr(sr_p, "name", "?"),
+                ref_path,
+                cw_r,
+                ch_r,
+                getattr(sr_r, "name", "?"),
+            )
+    except Exception as exc:
+        logging.warning("  Could not compare grid for %s (%s)", label, exc)
+
+
 def _find_raw_mtbs_raster(year: int) -> str | None:
     year_str = str(year)
     folder = f"mtbs_CONUS_{year}"
@@ -102,6 +160,7 @@ def _qc_raw_year(year: int) -> None:
     unexpected = sorted(v for v in counts if v not in RAW_ALL_VALUES)
 
     logging.info("  Raw path: %s", raw_path)
+    _log_grid("RAW", raw_path)
     logging.info("  Raw total pixels: %s", total)
     logging.info("  Raw burned pixels (1-5): %s", burned)
     if unexpected:
@@ -125,6 +184,9 @@ def _qc_reclass_year(year: int) -> None:
     unexpected = sorted(v for v in counts if v not in RECLASS_VALUES)
 
     logging.info("  Reclass path: %s", reclass_path)
+    _log_grid("RECLASS", reclass_path)
+    if _exists(cfg.NLCD_RASTER):
+        _warn_if_misaligned(reclass_path, cfg.NLCD_RASTER, f"reclass {year}")
     logging.info("  Reclass total pixels: %s", total)
     logging.info("  Reclass fire pixels (3/10): %s", fire_pixels)
     if unexpected:
@@ -147,11 +209,18 @@ def _qc_period_outputs(period: str) -> None:
     unexpected = sorted(v for v in counts if v not in RECLASS_VALUES)
 
     logging.info("  Combined fire path: %s", combined_path)
+    _log_grid("COMBINED", combined_path)
+    if _exists(cfg.NLCD_RASTER):
+        _warn_if_misaligned(combined_path, cfg.NLCD_RASTER, f"combined {period}")
     logging.info("  Combined fire pixels (3/10): %s", fire_pixels)
     if unexpected:
         logging.warning("  Combined fire unexpected values: %s", unexpected)
     if fire_pixels == 0:
         logging.warning("  Combined fire pixels are zero -> issue likely after reclass combine.")
+        logging.warning(
+            "  Inspect combine inputs: check if yearly reclass rasters align to NLCD "
+            "and ensure fire.py uses NLCD env during CellStatistics."
+        )
 
     _log_counts("COMBINED", counts)
 
@@ -168,6 +237,9 @@ def _qc_final_fire_presence(period: str) -> None:
     unexpected = sorted(v for v in counts if v not in FIRE_PRESENCE_VALUES)
 
     logging.info("  Final fire presence path: %s", presence_path)
+    _log_grid("FINAL_FIRE", presence_path)
+    if _exists(cfg.NLCD_RASTER):
+        _warn_if_misaligned(presence_path, cfg.NLCD_RASTER, f"final fire {period}")
     logging.info("  Final fire presence pixels (10): %s", fire_pixels)
     if unexpected:
         logging.warning("  Final fire presence unexpected values: %s", unexpected)
@@ -204,6 +276,9 @@ def _qc_final_disturbance(period: str) -> None:
         unexpected = sorted(v for v in counts if v not in FINAL_VALUES)
 
         logging.info("  Disturbance path: %s", path)
+        _log_grid(f"DISTURB[{tag}]", path)
+        if _exists(cfg.NLCD_RASTER):
+            _warn_if_misaligned(path, cfg.NLCD_RASTER, f"disturbance {tag} {period}")
         logging.info("  Disturbance fire pixels (10): %s", fire_pixels)
         if unexpected:
             logging.warning("  Disturbance unexpected values: %s", unexpected)
