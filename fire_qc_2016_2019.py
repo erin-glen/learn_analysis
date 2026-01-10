@@ -122,6 +122,37 @@ def _warn_if_misaligned(path: str, ref_path: str, label: str) -> None:
         logging.warning("  Could not compare grid for %s (%s)", label, exc)
 
 
+def _warn_if_inconsistent_with_reclass(combined_path: str, reclass_paths: list[str]) -> None:
+    if not reclass_paths:
+        return
+    first = reclass_paths[0]
+    if not _exists(first):
+        return
+    try:
+        dc = arcpy.Describe(combined_path)
+        dr = arcpy.Describe(first)
+        sr_c = getattr(dc, "spatialReference", None)
+        sr_r = getattr(dr, "spatialReference", None)
+        cw_c, ch_c = dc.meanCellWidth, dc.meanCellHeight
+        cw_r, ch_r = dr.meanCellWidth, dr.meanCellHeight
+        if (not sr_c or not sr_r) or (sr_c.name != sr_r.name) or (abs(cw_c - cw_r) > 1e-6) or (abs(ch_c - ch_r) > 1e-6):
+            logging.warning(
+                "  Combined raster grid differs from yearly reclass grid:\n"
+                "    COMBINED=%s (cell %.6f x %.6f, SR=%s)\n"
+                "    RECLASS=%s (cell %.6f x %.6f, SR=%s)",
+                combined_path,
+                cw_c,
+                ch_c,
+                getattr(sr_c, "name", "?"),
+                first,
+                cw_r,
+                ch_r,
+                getattr(sr_r, "name", "?"),
+            )
+    except Exception as exc:
+        logging.warning("  Could not compare combined vs reclass grid (%s)", exc)
+
+
 def _find_raw_mtbs_raster(year: int) -> str | None:
     year_str = str(year)
     folder = f"mtbs_CONUS_{year}"
@@ -197,12 +228,18 @@ def _qc_reclass_year(year: int) -> None:
     _log_counts("RECLASS", counts)
 
 
-def _qc_period_outputs(period: str) -> None:
+def _qc_period_outputs(period: str, years: list[int]) -> None:
     combined_path = os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{period}.tif")
     logging.info("Period fire QC for %s", period)
     if not _exists(combined_path):
         logging.warning("  Missing combined fire raster: %s", combined_path)
         return
+
+    reclass_paths = [
+        os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{year}_reclass.tif")
+        for year in years
+        if _exists(os.path.join(cfg.FIRE_OUTPUT_DIR, f"fire_{year}_reclass.tif"))
+    ]
 
     counts = _value_counts(combined_path)
     fire_pixels = _sum_counts(counts, {3, 10})
@@ -212,6 +249,7 @@ def _qc_period_outputs(period: str) -> None:
     _log_grid("COMBINED", combined_path)
     if _exists(cfg.NLCD_RASTER):
         _warn_if_misaligned(combined_path, cfg.NLCD_RASTER, f"combined {period}")
+    _warn_if_inconsistent_with_reclass(combined_path, reclass_paths)
     logging.info("  Combined fire pixels (3/10): %s", fire_pixels)
     if unexpected:
         logging.warning("  Combined fire unexpected values: %s", unexpected)
@@ -326,7 +364,7 @@ def main() -> int:
         _qc_raw_year(year)
         _qc_reclass_year(year)
 
-    _qc_period_outputs(args.period)
+    _qc_period_outputs(args.period, years)
     _qc_final_fire_presence(args.period)
     _qc_final_disturbance(args.period)
 
