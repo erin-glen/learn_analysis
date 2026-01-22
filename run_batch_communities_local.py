@@ -203,8 +203,8 @@ def run_batch_for_scale(
 
 def main():
     inventory_periods = [(2011, 2013)]
-    scale_name = "us_counties"
-    shapefile = r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_county\tl_2023_us_county_conus.shp"
+    scale_name = "us_tribal"
+    shapefile = r"C:\GIS\LEARN\AOI\crosswalk\tl_2023_us_aiannh\tl_2023_us_aiannh_conus.shp"
     id_field = "GEOID"
     tree_canopy_source = "NLCD"
     date_str = dt.now().strftime("%Y_%m_%d_%H_%M")

@@ -3,8 +3,8 @@ import glob
 import pandas as pd
 
 # Hardcoded input and output paths
-input_dir = r"C:\GIS\LEARN\Outputs\2025_04_28_18_42_us_places"
-output_path = r"C:\GIS\LEARN\Outputs\us_places.csv"
+input_dir = r"C:\GIS\LEARN\Outputs\USCA_20251006_update\2025_07_18_39_25_us_places"
+output_path = r"C:\GIS\LEARN\Outputs\USCA_20251006_update\compiled\us_places.csv"
 
 
 def combine_csvs(input_dir, output_path):
