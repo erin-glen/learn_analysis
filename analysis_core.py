@@ -153,8 +153,14 @@ def perform_analysis(
                 # Zero out other disturbances, if any
                 if "insect_damage_HA" in forest_age_df.columns:
                     forest_age_df.loc[recat_fire, "insect_damage_HA"] = 0
-                if "harvest_HA" in forest_age_df.columns:
-                    forest_age_df.loc[recat_fire, "harvest_HA"] = 0
+                for column in [
+                    "harvest_0_25_HA",
+                    "harvest_25_50_HA",
+                    "harvest_50_75_HA",
+                    "harvest_75_100_HA",
+                ]:
+                    if column in forest_age_df.columns:
+                        forest_age_df.loc[recat_fire, column] = 0
                 if "undisturbed_HA" in forest_age_df.columns:
                     forest_age_df.loc[recat_fire, "undisturbed_HA"] = 0
 
