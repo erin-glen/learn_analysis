@@ -50,7 +50,10 @@ nlcdParentRollupCategories = {
 
 disturbanceLookup = {
 	#0: 'no_disturbance_HA',
-	1: 'harvest_HA',
+	1: 'harvest_0_25_HA',
+	2: 'harvest_25_50_HA',
+	3: 'harvest_50_75_HA',
+	4: 'harvest_75_100_HA',
 	5: 'insect_damage_HA',
 	10: 'fire_HA'
 }

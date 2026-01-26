@@ -416,7 +416,14 @@ def compute_disturbance_max(
     ).reset_index()
 
     # Ensure necessary columns exist
-    required_columns = ["fire_HA", "harvest_HA", "insect_damage_HA"]
+    required_columns = [
+        "fire_HA",
+        "insect_damage_HA",
+        "harvest_0_25_HA",
+        "harvest_25_50_HA",
+        "harvest_50_75_HA",
+        "harvest_75_100_HA",
+    ]
     for col in required_columns:
         if col not in disturbance_wide.columns:
             disturbance_wide[col] = 0
@@ -595,15 +602,28 @@ def fill_na_values(forest_age_df: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: Updated DataFrame.
     """
     # Fill NA values
-    forest_age_df["fire_HA"] = forest_age_df["fire_HA"].fillna(0)
-    forest_age_df["insect_damage_HA"] = forest_age_df["insect_damage_HA"].fillna(0)
-    forest_age_df["harvest_HA"] = forest_age_df["harvest_HA"].fillna(0)
+    disturbance_columns = [
+        "fire_HA",
+        "insect_damage_HA",
+        "harvest_0_25_HA",
+        "harvest_25_50_HA",
+        "harvest_50_75_HA",
+        "harvest_75_100_HA",
+    ]
+    for column in disturbance_columns:
+        if column not in forest_age_df.columns:
+            forest_age_df[column] = 0
+        else:
+            forest_age_df[column] = forest_age_df[column].fillna(0)
 
     # Calculate undisturbed area
     forest_age_df["undisturbed_HA"] = (
         forest_age_df["Hectares"]
         - forest_age_df["fire_HA"]
-        - forest_age_df["harvest_HA"]
+        - forest_age_df["harvest_0_25_HA"]
+        - forest_age_df["harvest_25_50_HA"]
+        - forest_age_df["harvest_50_75_HA"]
+        - forest_age_df["harvest_75_100_HA"]
         - forest_age_df["insect_damage_HA"]
     )
 
@@ -632,7 +652,10 @@ def merge_age_factors(
         "Forests Remaining Forest Removal Factor",
         "Fire Emissions Factor",
         "Insect Emissions Factor",
-        "Harvest Emissions Factor",
+        "Harvest 0-25 Emissions Factor",
+        "Harvest 25-50 Emissions Factor",
+        "Harvest 50-75 Emissions Factor",
+        "Harvest 75-100 Emissions Factor",
     ]
     forest_table = pd.read_csv(forest_lookup_csv, usecols=columns_to_use)
 
@@ -672,8 +695,29 @@ def calculate_forest_removals_and_emissions(
     forest_age_df["Annual_Emissions_Fire_CO2"] = (
         forest_age_df["fire_HA"] * forest_age_df["Fire Emissions Factor"] * (44 / 12) / years_difference
     )
-    forest_age_df["Annual_Emissions_Harvest_CO2"] = (
-        forest_age_df["harvest_HA"] * forest_age_df["Harvest Emissions Factor"] * (44 / 12) / years_difference
+    forest_age_df["Annual_Emissions_Harvest_0_25_CO2"] = (
+        forest_age_df["harvest_0_25_HA"]
+        * forest_age_df["Harvest 0-25 Emissions Factor"]
+        * (44 / 12)
+        / years_difference
+    )
+    forest_age_df["Annual_Emissions_Harvest_25_50_CO2"] = (
+        forest_age_df["harvest_25_50_HA"]
+        * forest_age_df["Harvest 25-50 Emissions Factor"]
+        * (44 / 12)
+        / years_difference
+    )
+    forest_age_df["Annual_Emissions_Harvest_50_75_CO2"] = (
+        forest_age_df["harvest_50_75_HA"]
+        * forest_age_df["Harvest 50-75 Emissions Factor"]
+        * (44 / 12)
+        / years_difference
+    )
+    forest_age_df["Annual_Emissions_Harvest_75_100_CO2"] = (
+        forest_age_df["harvest_75_100_HA"]
+        * forest_age_df["Harvest 75-100 Emissions Factor"]
+        * (44 / 12)
+        / years_difference
     )
     forest_age_df["Annual_Emissions_Insect_CO2"] = (
         forest_age_df["insect_damage_HA"] * forest_age_df["Insect Emissions Factor"] * (44 / 12) / years_difference
@@ -818,7 +862,10 @@ def calculate_area(
             "Undisturbed": "undisturbed_HA",
             "Fire": "fire_HA",
             "Insect/Disease": "insect_damage_HA",
-            "Harvest/Other": "harvest_HA",
+            "Harvest 0-25%": "harvest_0_25_HA",
+            "Harvest 25-50%": "harvest_25_50_HA",
+            "Harvest 50-75%": "harvest_50_75_HA",
+            "Harvest 75-100%": "harvest_75_100_HA",
         }
         column = columns_mapping.get(type_)
         if column:
@@ -897,7 +944,10 @@ def calculate_ghg_flux(
             "Undisturbed": "Annual_Removals_Undisturbed_CO2",
             "Fire": "Annual_Emissions_Fire_CO2",
             "Insect/Disease": "Annual_Emissions_Insect_CO2",
-            "Harvest/Other": "Annual_Emissions_Harvest_CO2",
+            "Harvest 0-25%": "Annual_Emissions_Harvest_0_25_CO2",
+            "Harvest 25-50%": "Annual_Emissions_Harvest_25_50_CO2",
+            "Harvest 50-75%": "Annual_Emissions_Harvest_50_75_CO2",
+            "Harvest 75-100%": "Annual_Emissions_Harvest_75_100_CO2",
         }
         column = columns_mapping.get(type_)
         if column:
@@ -966,7 +1016,10 @@ def summarize_ghg(
         ("Forest Remaining Forest", "Undisturbed", "Removals"),
         ("Forest Remaining Forest", "Fire", "Emissions"),
         ("Forest Remaining Forest", "Insect/Disease", "Emissions"),
-        ("Forest Remaining Forest", "Harvest/Other", "Emissions"),
+        ("Forest Remaining Forest", "Harvest 0-25%", "Emissions"),
+        ("Forest Remaining Forest", "Harvest 25-50%", "Emissions"),
+        ("Forest Remaining Forest", "Harvest 50-75%", "Emissions"),
+        ("Forest Remaining Forest", "Harvest 75-100%", "Emissions"),
     ]
 
     if include_trees_outside_forest:
@@ -1041,14 +1094,19 @@ def save_results(
     landuse_numeric_cols = [
         "Hectares", "CellCount",
         "carbon_ag_bg_us", "carbon_sd_dd_lt", "carbon_so",
-        "fire_HA", "harvest_HA", "insect_damage_HA",
+        "fire_HA", "insect_damage_HA",
+        "harvest_0_25_HA", "harvest_25_50_HA", "harvest_50_75_HA", "harvest_75_100_HA",
         "TreeCanopy_HA", "TreeCanopyLoss_HA",
         "Annual Emissions Forest to Non Forest CO2",
     ]
     forest_type_numeric_cols = [
-        "Hectares", "fire_HA", "harvest_HA", "insect_damage_HA", "undisturbed_HA",
+        "Hectares", "fire_HA", "insect_damage_HA", "undisturbed_HA",
+        "harvest_0_25_HA", "harvest_25_50_HA", "harvest_50_75_HA", "harvest_75_100_HA",
         "Annual_Removals_Undisturbed_CO2", "Annual_Removals_N_to_F_CO2",
-        "Annual_Emissions_Fire_CO2", "Annual_Emissions_Harvest_CO2", "Annual_Emissions_Insect_CO2"
+        "Annual_Emissions_Fire_CO2",
+        "Annual_Emissions_Harvest_0_25_CO2", "Annual_Emissions_Harvest_25_50_CO2",
+        "Annual_Emissions_Harvest_50_75_CO2", "Annual_Emissions_Harvest_75_100_CO2",
+        "Annual_Emissions_Insect_CO2"
     ]
 
     # 2) Round columns in landuse_result
@@ -1083,4 +1141,3 @@ def save_results(
     processing_time = dt.now() - start_time
     with open(os.path.join(output_path, f"processing_time{geography_suffix}.txt"), "w") as f:
         f.write(f"Total processing time: {processing_time}\n")
-
