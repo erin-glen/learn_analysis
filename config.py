@@ -4,6 +4,7 @@ import os
 # Base directories
 DATA_FOLDER = r"C:\GIS\Data\LEARN\SourceData"
 OUTPUT_BASE_DIR = r"C:\GIS\Data\LEARN\Outputs"
+DISTURBANCE_FOLDER = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\final_disturbances"
 
 # Valid years for analysis
 VALID_YEARS = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019", "2021","2023"]
@@ -67,13 +68,13 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     input_config = {
         "nlcd_1": os.path.join(
             DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year1}_Land_Cover_l48_20210604.tif"
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year1}_CU_C1V0.tif"
         ),
         "nlcd_2": os.path.join(
             DATA_FOLDER,
-            "LandCover",
-            f"NLCD_{year2}_Land_Cover_l48_20210604.tif"
+            "NEW_NLCD",
+            f"Annual_NLCD_LndCov_{year2}_CU_C1V0.tif"
         ),
         "forest_age_raster": os.path.join(
             DATA_FOLDER, "ForestType", "forest_raster_01062025.tif"
@@ -100,19 +101,15 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     # If tree_canopy_source is set, choose appropriate canopy data
     if tree_canopy_source:
         if tree_canopy_source == "NLCD":
-            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_Project")
-
-            # ─────────────────────────────────────────────────────────────────
-            # NEW LOGIC: If user picks 2021-2023 for land cover, override
-            # canopy to 2019/2021
-            # ─────────────────────────────────────────────────────────────────
-            if (year1 == 2021 and year2 == 2023):
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, "nlcd_tcc_conus_2019_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, "nlcd_tcc_conus_2021_v2021-4_projected.tif")
-            else:
-                input_config["tree_canopy_1"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year1}_v2021-4_projected.tif")
-                input_config["tree_canopy_2"] = os.path.join(tc_folder, f"nlcd_tcc_conus_{year2}_v2021-4_projected.tif")
-            # ─────────────────────────────────────────────────────────────────
+            tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "NLCD_v2023-5_project")
+            input_config["tree_canopy_1"] = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_wgs84_v2023-5_{year1}0101_{year1}1231_projected.tif",
+            )
+            input_config["tree_canopy_2"] = os.path.join(
+                tc_folder,
+                f"nlcd_tcc_conus_wgs84_v2023-5_{year2}0101_{year2}1231_projected.tif",
+            )
 
         elif tree_canopy_source == "CBW":
             tc_folder = os.path.join(DATA_FOLDER, "TreeCanopy", "CBW")
@@ -135,15 +132,15 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
 
     # Disturbance rasters info
     disturbance_rasters_info = [
-        {"name": "disturbance_0104.tif", "start_year": 2001, "end_year": 2004},
-        {"name": "disturbance_0406.tif", "start_year": 2004, "end_year": 2006},
-        {"name": "disturbance_0608.tif", "start_year": 2006, "end_year": 2008},
-        {"name": "disturbance_0811.tif", "start_year": 2008, "end_year": 2011},
-        {"name": "disturbance_1113.tif", "start_year": 2011, "end_year": 2013},
-        {"name": "disturbance_1316.tif", "start_year": 2013, "end_year": 2016},
-        {"name": "disturbance_1619.tif", "start_year": 2016, "end_year": 2019},
-        {"name": "disturbance_1921.tif", "start_year": 2019, "end_year": 2021},
-        {"name": "disturbance_2123.tif", "start_year": 2021, "end_year": 2023},
+        {"name": "disturb_abs_2001_2004.tif", "start_year": 2001, "end_year": 2004},
+        {"name": "disturb_abs_2004_2006.tif", "start_year": 2004, "end_year": 2006},
+        {"name": "disturb_abs_2006_2008.tif", "start_year": 2006, "end_year": 2008},
+        {"name": "disturb_abs_2008_2011.tif", "start_year": 2008, "end_year": 2011},
+        {"name": "disturb_abs_2011_2013.tif", "start_year": 2011, "end_year": 2013},
+        {"name": "disturb_abs_2013_2016.tif", "start_year": 2013, "end_year": 2016},
+        {"name": "disturb_abs_2016_2019.tif", "start_year": 2016, "end_year": 2019},
+        {"name": "disturb_abs_2019_2021.tif", "start_year": 2019, "end_year": 2021},
+        {"name": "disturb_abs_2021_2023.tif", "start_year": 2021, "end_year": 2023},
     ]
 
     # Pick disturbance rasters fully inside the analysis period
@@ -153,7 +150,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
         end = dist_info["end_year"]
         # If the disturbance window is entirely within the user’s chosen [year1, year2]
         if (start >= year1) and (end <= year2):
-            dist_raster_path = os.path.join(DATA_FOLDER, "Disturbances", dist_info["name"])
+            dist_raster_path = os.path.join(DISTURBANCE_FOLDER, dist_info["name"])
             selected_disturbance_rasters.append(dist_raster_path)
 
     input_config["disturbance_rasters"] = selected_disturbance_rasters
