@@ -86,9 +86,7 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
             DATA_FOLDER, new_carbon, "carbon_sd_dd_lt.tif"
         ),
         "carbon_so": os.path.join(DATA_FOLDER, new_carbon, "carbon_so.tif"),
-        "forest_lookup_csv": os.path.join(
-            DATA_FOLDER, "ForestType", "forest_raster_09172020.csv"
-        ),
+        "forest_lookup_csv": r"C:\GIS\Data\LEARN\ForestRaster\2026\forest_raster_01062026_with_new_harvest_EFs.csv",
         "plantable_areas": "None",
     }
 

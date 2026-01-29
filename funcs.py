@@ -652,10 +652,10 @@ def merge_age_factors(
         "Forests Remaining Forest Removal Factor",
         "Fire Emissions Factor",
         "Insect Emissions Factor",
-        "Harvest 0-25 Emissions Factor",
-        "Harvest 25-50 Emissions Factor",
-        "Harvest 50-75 Emissions Factor",
-        "Harvest 75-100 Emissions Factor",
+        "Harvest_EF_0_25",
+        "Harvest_EF_25_50",
+        "Harvest_EF_50_75",
+        "Harvest_EF_75_100",
     ]
     forest_table = pd.read_csv(forest_lookup_csv, usecols=columns_to_use)
 
@@ -697,25 +697,25 @@ def calculate_forest_removals_and_emissions(
     )
     forest_age_df["Annual_Emissions_Harvest_0_25_CO2"] = (
         forest_age_df["harvest_0_25_HA"]
-        * forest_age_df["Harvest 0-25 Emissions Factor"]
+        * forest_age_df["Harvest_EF_0_25"]
         * (44 / 12)
         / years_difference
     )
     forest_age_df["Annual_Emissions_Harvest_25_50_CO2"] = (
         forest_age_df["harvest_25_50_HA"]
-        * forest_age_df["Harvest 25-50 Emissions Factor"]
+        * forest_age_df["Harvest_EF_25_50"]
         * (44 / 12)
         / years_difference
     )
     forest_age_df["Annual_Emissions_Harvest_50_75_CO2"] = (
         forest_age_df["harvest_50_75_HA"]
-        * forest_age_df["Harvest 50-75 Emissions Factor"]
+        * forest_age_df["Harvest_EF_50_75"]
         * (44 / 12)
         / years_difference
     )
     forest_age_df["Annual_Emissions_Harvest_75_100_CO2"] = (
         forest_age_df["harvest_75_100_HA"]
-        * forest_age_df["Harvest 75-100 Emissions Factor"]
+        * forest_age_df["Harvest_EF_75_100"]
         * (44 / 12)
         / years_difference
     )
