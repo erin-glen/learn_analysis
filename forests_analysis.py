@@ -60,7 +60,7 @@ def main(mode=None):
     all_results = []
 
     # Determine the recategorize_mode flag based on the mode parameter
-    recategorize_mode = False
+    recategorize_mode = True
     if mode == 'recategorize':
         recategorize_mode = True
         arcpy.AddMessage("Recategorization mode is enabled.")

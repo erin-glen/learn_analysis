@@ -14,6 +14,7 @@ if __name__ == "__main__":
         (2013, 2016),
         (2016, 2019),
         (2019, 2021),
+        (2021, 2023)
     ]
 
     for year1, year2 in inventory_periods:
