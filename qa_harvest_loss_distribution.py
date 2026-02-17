@@ -29,13 +29,19 @@ Optional masking
   If your mask raster is 0/1 (0 outside), use --mask0-outside to treat 0 as NoData outside.
 
 Run examples
-  # Latest 4 available TCC periods (default), no AOI mask
+  # Default: latest 4 periods with auto-generated per-period forest-remains-forest AOI masks
   python qa_harvest_loss_distribution.py
 
-  # Specify periods + AOI feature mask
+  # All available periods with auto AOI forced to rebuild cached masks
+  python qa_harvest_loss_distribution.py --periods all --aoi-force-rebuild
+
+  # Disable auto AOI entirely (run unmasked unless --mask is provided)
+  python qa_harvest_loss_distribution.py --no-auto-aoi
+
+  # Manual AOI override (feature class)
   python qa_harvest_loss_distribution.py --periods 2013_2016,2016_2019,2019_2021,2021_2023 --mask C:\\GIS\\Data\\Masks\\USFS_BLM_forest.gdb\\aoi
 
-  # Raster mask where 0=outside, 1=inside
+  # Manual AOI override (0/1 raster where 0=outside)
   python qa_harvest_loss_distribution.py --mask C:\\GIS\\Data\\Masks\\USFS_BLM_forest_mask.tif --mask0-outside
 
 Notes
