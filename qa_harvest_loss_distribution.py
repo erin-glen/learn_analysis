@@ -269,7 +269,8 @@ def _zonal_histogram_table(zone_ras: str, value_ras: Raster, out_table: str) -> 
     """
     # Use "Value" as the zone field for raster zones.
     # ignore_nodata="DATA" avoids counting NoData in the value raster.
-    ZonalHistogram(zone_ras, "Value", value_ras, out_table, "DATA")
+    # zones_as_rows="ZONES_AS_ROWS" is required by some ArcGIS Pro versions.
+    ZonalHistogram(zone_ras, "Value", value_ras, out_table, "DATA", "ZONES_AS_ROWS")
     return out_table
 
 
