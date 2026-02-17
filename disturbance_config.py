@@ -121,6 +121,14 @@ NLCD_FINAL_FIRE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "10")
 NLCD_TCC_CHANGE_DIR       = os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_change")       # absolute pp change
 NLCD_HARVEST_SEVERITY_DIR = os.path.join(NLCD_HARVEST_ROOT, "Harvest_severity")         # pp-based severity (0–4)
 
+# Auto-generated AOI masks used by QA and related diagnostics
+NLCD_AOI_MASK_DIR = os.path.join(NLCD_HARVEST_ROOT, "AOI_masks")
+AOI_MASK_BUILD_MODE = "forest_remains_forest"
+
+# NLCD classes treated as forest for AOI generation
+# 41: Deciduous Forest, 42: Evergreen Forest, 43: Mixed Forest
+NLCD_FOREST_CLASSES = [41, 42, 43]
+
 for _d in [
     NLCD_HARVEST_ROOT,
     NLCD_FINAL_DIR,
@@ -129,6 +137,7 @@ for _d in [
     NLCD_FINAL_FIRE_DIR,
     NLCD_TCC_CHANGE_DIR,
     NLCD_HARVEST_SEVERITY_DIR,
+    NLCD_AOI_MASK_DIR,
 ]:
     os.makedirs(_d, exist_ok=True)
 

@@ -23,8 +23,9 @@ What this script does (per period)
      - threshold_impact.csv: effect of candidate minimum-loss thresholds on total harvest area
 
 Optional masking
-  You can pass --mask to restrict analysis to an AOI (e.g., USFS/BLM forest lands).
-  Mask can be a feature class (polygons) or a raster.
+  By default, the script auto-builds a period AOI mask from NLCD land cover:
+  cells must be forest in both period endpoints ("forest remains forest").
+  You can still pass --mask to override with a manual AOI (feature or raster).
   If your mask raster is 0/1 (0 outside), use --mask0-outside to treat 0 as NoData outside.
 
 Run examples
@@ -202,6 +203,60 @@ def _build_mask(mask_path: str, mask0_outside: bool) -> Raster | str:
     return SetNull(m == 0, 1)
 
 
+def _forest_binary(lc_raster: Raster) -> Raster:
+    classes = list(getattr(cfg, "NLCD_FOREST_CLASSES", [41, 42, 43]))
+    if not classes:
+        raise ValueError("cfg.NLCD_FOREST_CLASSES is empty; cannot build AOI mask.")
+    cond = (lc_raster == int(classes[0]))
+    for cls in classes[1:]:
+        cond = cond | (lc_raster == int(cls))
+    return Con(cond, 1)
+
+
+def _period_aoi_path(period: str) -> str:
+    mode = getattr(cfg, "AOI_MASK_BUILD_MODE", "forest_remains_forest")
+    out_dir = getattr(cfg, "NLCD_AOI_MASK_DIR", os.path.join(cfg.NLCD_HARVEST_ROOT, "AOI_masks"))
+    os.makedirs(out_dir, exist_ok=True)
+    return os.path.join(out_dir, f"aoi_{mode}_{period}.tif")
+
+
+def _build_period_aoi_mask(period: str, force: bool = False) -> str:
+    out_path = _period_aoi_path(period)
+    if _exists(out_path) and not force:
+        return out_path
+
+    sy, ey = _parse_period(period)
+    lc_start = cfg.NLCD_LC_RASTERS.get(sy)
+    lc_end = cfg.NLCD_LC_RASTERS.get(ey)
+    if not (_exists(lc_start) and _exists(lc_end)):
+        raise FileNotFoundError(
+            f"Cannot build AOI for {period}: missing NLCD LC endpoint(s). start={lc_start}, end={lc_end}"
+        )
+
+    start_forest = _forest_binary(Raster(lc_start))
+    end_forest = _forest_binary(Raster(lc_end))
+    aoi = SetNull((start_forest != 1) | (end_forest != 1), 1)
+    aoi.save(out_path)
+    return out_path
+
+
+def _resolve_period_mask(period: str, args: argparse.Namespace):
+    if args.mask:
+        return _build_mask(args.mask, args.mask0_outside), "manual", args.mask
+
+    if not args.auto_aoi:
+        return None, "none", ""
+
+    try:
+        path = _build_period_aoi_mask(period, force=args.aoi_force_rebuild)
+        return path, "auto_forest_remaining_forest", path
+    except Exception:
+        if args.strict_aoi:
+            raise
+        logging.warning("Failed to build auto AOI for %s; proceeding without mask.", period, exc_info=True)
+        return None, "none", ""
+
+
 def _zonal_histogram_table(zone_ras: str, value_ras: Raster, out_table: str) -> str:
     """
     Runs ZonalHistogram and returns out_table.
@@ -312,13 +367,29 @@ def main():
     ap.add_argument(
         "--mask",
         default="",
-        help=("Optional AOI mask (feature class or raster). "
-              "Use this to restrict analysis to USFS/BLM forest lands, etc.")
+        help=("Optional manual AOI mask (feature class or raster). "
+              "If supplied, this overrides auto-generated per-period AOI masks.")
     )
     ap.add_argument(
         "--mask0-outside",
         action="store_true",
-        help="If mask is a 0/1 raster where 0 means outside, convert 0 to NoData for masking."
+        help="If manual --mask is a 0/1 raster where 0 means outside, convert 0 to NoData for masking."
+    )
+    ap.add_argument(
+        "--auto-aoi",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable/disable automatic per-period AOI masks (default: enabled)."
+    )
+    ap.add_argument(
+        "--aoi-force-rebuild",
+        action="store_true",
+        help="Rebuild period AOI masks even when cached outputs already exist."
+    )
+    ap.add_argument(
+        "--strict-aoi",
+        action="store_true",
+        help="Fail on auto-AOI build errors instead of warning and continuing unmasked."
     )
     ap.add_argument(
         "--prefer-harvest-counted",
@@ -375,21 +446,17 @@ def main():
     out_long = os.path.join(out_dir, "loss_hist_long.csv")
     out_summary = os.path.join(out_dir, "loss_hist_summary.csv")
     out_impact = os.path.join(out_dir, "threshold_impact.csv")
-
-    # Prepare mask (optional)
-    mask_obj = _build_mask(args.mask, args.mask0_outside) if args.mask else None
-    if args.mask:
-        logging.info("Using AOI mask: %s", args.mask)
+    out_aoi_diag = os.path.join(out_dir, "aoi_diagnostics.csv")
 
     # Write headers
     with open(out_long, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["period", "zone_raster", "harvest_class", "loss_pp", "cell_count", "area_ha", "pct_within_class"])
+        w.writerow(["period", "zone_raster", "aoi_source", "aoi_mask_path", "harvest_class", "loss_pp", "cell_count", "area_ha", "pct_within_class"])
 
     with open(out_summary, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
-            "period", "zone_raster", "harvest_class",
+            "period", "zone_raster", "aoi_source", "aoi_mask_path", "harvest_class",
             "total_area_ha", "median_loss_pp",
             *[f"pct_area_le_{k}pp" for k in report_bins]
         ])
@@ -397,7 +464,7 @@ def main():
     with open(out_impact, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
-            "period", "zone_raster",
+            "period", "zone_raster", "aoi_source", "aoi_mask_path",
             "total_harvest_area_ha",
             "min_loss_pp",
             "removed_area_ha",
@@ -405,6 +472,10 @@ def main():
             "remaining_area_ha",
             "remaining_pct_of_harvest"
         ])
+
+    with open(out_aoi_diag, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["period", "aoi_source", "aoi_mask_path", "analyzed_cell_count", "analyzed_area_ha"])
 
     # Main loop
     try:
@@ -420,6 +491,14 @@ def main():
             )
             logging.info("Zones: %s (%s)", zone_path, zone_label)
 
+            period_mask_obj, aoi_source, aoi_mask_path = _resolve_period_mask(period, args)
+            if aoi_source == "manual":
+                logging.info("AOI mask for %s: manual (%s)", period, aoi_mask_path)
+            elif aoi_source.startswith("auto"):
+                logging.info("AOI mask for %s: auto (%s)", period, aoi_mask_path)
+            else:
+                logging.info("AOI mask for %s: none", period)
+
             dpp = _load_or_compute_dpp(
                 period=period,
                 start_year=sy,
@@ -428,15 +507,19 @@ def main():
             )
             loss = _loss_from_dpp(dpp)
 
-            # Run zonal histogram under optional mask
+            # Run zonal histogram under period-specific optional mask
             tmp_table = os.path.join(arcpy.env.scratchGDB, f"zh_{period}_{int(time.time())}")
-            if mask_obj:
-                with arcpy.EnvManager(mask=mask_obj):
+            if period_mask_obj:
+                with arcpy.EnvManager(mask=period_mask_obj):
                     _zonal_histogram_table(zone_path, loss, tmp_table)
             else:
                 _zonal_histogram_table(zone_path, loss, tmp_table)
 
             _, rows = _read_zonal_hist(tmp_table)
+            analyzed_cells = sum(sum(h.values()) for _, h in rows)
+            with open(out_aoi_diag, "a", newline="") as f:
+                w = csv.writer(f)
+                w.writerow([period, aoi_source, aoi_mask_path, analyzed_cells, f"{analyzed_cells * cell_ha:.6f}"])
 
             # Convert to per-zone hist and write long + summary
             zone_hists: Dict[int, Dict[int, int]] = {z: h for z, h in rows}
@@ -466,13 +549,13 @@ def main():
                         c = hist[loss_pp]
                         area_ha = c * cell_ha
                         pct = 100.0 * c / total_cells
-                        w.writerow([period, zone_label, z, loss_pp, c, f"{area_ha:.6f}", f"{pct:.4f}"])
+                        w.writerow([period, zone_label, aoi_source, aoi_mask_path, z, loss_pp, c, f"{area_ha:.6f}", f"{pct:.4f}"])
 
                 # Summary record
                 with open(out_summary, "a", newline="") as f:
                     w = csv.writer(f)
                     row = [
-                        period, zone_label, z,
+                        period, zone_label, aoi_source, aoi_mask_path, z,
                         f"{total_area_ha:.6f}",
                         "" if med is None else med,
                     ]
@@ -502,7 +585,7 @@ def main():
                 with open(out_impact, "a", newline="") as f:
                     w = csv.writer(f)
                     w.writerow([
-                        period, zone_label,
+                        period, zone_label, aoi_source, aoi_mask_path,
                         f"{total_harvest_area_ha:.6f}",
                         tmin,
                         f"{removed_area_ha:.6f}",
@@ -520,6 +603,7 @@ def main():
     logging.info("  %s", out_long)
     logging.info("  %s", out_summary)
     logging.info("  %s", out_impact)
+    logging.info("  %s", out_aoi_diag)
 
 
 if __name__ == "__main__":
