@@ -59,7 +59,7 @@ def main():
 
         logging.info(f"Merging {len(region_rasters)} region rasters => {out_path}")
 
-        # Mosaic method="MAXIMUM" => 5 overrides 0 if there's overlap
+        # Mosaic method="MAXIMUM" => higher-severity code wins where there's overlap
         arcpy.management.MosaicToNewRaster(
             input_rasters=region_rasters,
             output_location=cfg.INSECT_FINAL_DIR,
