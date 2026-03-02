@@ -9,7 +9,8 @@ Expected categories (byte):
   0   = background
   1-4 = harvest severity
   5   = insect/disease
-  10  = fire
+  6   = low-severity fire
+  10  = moderate/high fire
 """
 
 import argparse
@@ -23,7 +24,7 @@ import arcpy
 
 import disturbance_config as cfg
 
-ALLOWED_VALUES = {0, 1, 2, 3, 4, 5, 10}
+ALLOWED_VALUES = {0, 1, 2, 3, 4, 5, 6, 10}
 HARVEST_VALUES = {1, 2, 3, 4}
 
 
@@ -88,7 +89,9 @@ def _summarize_raster(raster_path: str) -> dict:
     unexpected = sorted(v for v in counts if v not in ALLOWED_VALUES)
     harvest_total = sum(counts.get(v, 0) for v in HARVEST_VALUES)
     insect_total = counts.get(5, 0)
-    fire_total = counts.get(10, 0)
+    low_fire_total = counts.get(6, 0)
+    high_fire_total = counts.get(10, 0)
+    fire_total = low_fire_total + high_fire_total
 
     issues: list[str] = []
     if unexpected:
@@ -100,7 +103,7 @@ def _summarize_raster(raster_path: str) -> dict:
     if insect_total == 0:
         issues.append("no insect pixels (5) present")
     if fire_total == 0:
-        issues.append("no fire pixels (10) present")
+        issues.append("no fire pixels (6/10) present")
 
     return {
         "path": raster_path,
