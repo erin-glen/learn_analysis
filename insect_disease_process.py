@@ -24,6 +24,7 @@ def _process_period(period: str):
     1) Convert the period string into a list of years [2019, 2020, 2021].
     2) For each region in cfg.REGIONS, extract features from the GDB for those years.
     3) Rasterize and save output as: insect_damage_{region}_{period}.tif
+
     """
     # Parse the string "YYYY_YYYY" => [YYYY, YYYY+1, ..., YYYY2]
     try:
@@ -98,10 +99,10 @@ def _process_period(period: str):
         # Build SQL:
         #   SELECT ..., damage_val
         #   WHERE SURVEY_YEAR in (2019,2020,2021,...)
-        #   damage_val = 5 if 'Mortality - Previously Undocumented', else 0
+        #   damage_val = 5 for mortality classes, else 0
         year_str = ",".join(map(str, years))
         sql_query = (
-            "SELECT *, CASE WHEN DAMAGE_TYPE = 'Mortality - Previously Undocumented' "
+            "SELECT *, CASE WHEN DAMAGE_TYPE IN ('Mortality - Previously Undocumented', 'Mortality') "
             "THEN 5 ELSE 0 END AS damage_val "
             f"FROM '{layer_name}' WHERE SURVEY_YEAR IN ({year_str})"
         )

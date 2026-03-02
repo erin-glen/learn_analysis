@@ -8,7 +8,8 @@ folder structure.
 Final codes:
   1–4 : Harvest severity (as provided by the chosen harvest workflow; Hansen is binary=1)
   5   : Insect/Disease presence  (presence -> 5, else 0)
-  10  : Fire presence            (presence -> 10, else 0; low fire severity masked pre-combine if enabled)
+  6   : Low-severity fire        (preserved as a distinct class)
+  10  : Moderate/high fire       (preserved as a distinct class)
 
 Also exports a “harvest_counted” layer per method:
   harvest_counted_{method_tag}_{period}.tif
@@ -62,14 +63,13 @@ def _save_byte_tif(ras, out_tif, *, overwrite=False, lzw=True):
             pass
     return True
 
-def _mask_low_severity_fire(fire_ras: Raster) -> Raster:
-    mask_fire = getattr(cfg, "MASK_LOW_SEVERITY_FIRE", True)
+def _encode_fire_classes(fire_ras: Raster) -> Raster:
     low_code = getattr(cfg, "FIRE_LOW_SEVERITY_CODE", 3)
-    if not mask_fire:
-        logging.info("MASK_LOW_SEVERITY_FIRE is False; keeping all fire classes as-is.")
-        return fire_ras
-    logging.info("Masking low-severity fire: code %s -> 0 (pre-combine).", low_code)
-    return Con(fire_ras == low_code, 0, fire_ras)
+    low_out = getattr(cfg, "FINAL_FIRE_LOW_CODE", 6)
+    high_out = getattr(cfg, "FINAL_FIRE_HIGH_CODE", 10)
+    logging.info("Encoding fire classes: low(%s)->%s, high(>0 and !=%s)->%s", low_code, low_out, low_code, high_out)
+    return Con(fire_ras == low_code, low_out, Con(fire_ras > 0, high_out, 0))
+
 
 def _log_grid_info(tag, ras_path):
     try:
@@ -150,24 +150,24 @@ def main():
         insect_ras = Raster(insect_path)
         logging.info("Loaded fire/insect for %s in %.1f s", period, time.perf_counter() - t0)
 
-        # Fire presence: mask low-sev fire, recode presence -> 10
+        # Fire classes: preserve low-severity and moderate/high as distinct classes
         t1 = time.perf_counter()
-        fire_masked = _mask_low_severity_fire(fire_ras)
-        fire_final  = Con(fire_masked > 0, 10, 0)
+        fire_final = _encode_fire_classes(fire_ras)
         logging.info("Prepared fire presence for %s in %.1f s", period, time.perf_counter() - t1)
 
-        # Insect presence: presence -> 5
+        # Insect presence: presence -> configured insect code (default 5)
         t2 = time.perf_counter()
-        insect_final = Con(insect_ras > 0, 5, 0)
+        insect_code = getattr(cfg, "FINAL_INSECT_CODE", 5)
+        insect_final = Con(insect_ras > 0, insect_code, 0)
         logging.info("Prepared insect presence for %s in %.1f s", period, time.perf_counter() - t2)
 
         # Save presence exports (shared by both methods) if missing
         out_insect = os.path.join(cfg.NLCD_FINAL_INSECT_DIR, f"insect_{period}.tif")
         out_fire   = os.path.join(cfg.NLCD_FINAL_FIRE_DIR,   f"fire_{period}.tif")
         if _save_byte_tif(insect_final, out_insect, lzw=True):
-            logging.info("Saved insect presence => %s", out_insect)
+            logging.info("Saved insect class raster => %s", out_insect)
         if _save_byte_tif(fire_final, out_fire, lzw=True):
-            logging.info("Saved fire presence => %s", out_fire)
+            logging.info("Saved fire class raster => %s", out_fire)
 
         # Now build finals for each requested harvest workflow
         for wf in FINAL_HARVEST_WORKFLOWS:
@@ -196,7 +196,7 @@ def main():
 
             harvest_ras = Raster(harvest_path)
 
-            # Combined MAX (DATA): [fire=10, insect=5, harvest=1..4]
+            # Combined MAX (DATA): [fire={low/high}, insect=5, harvest=1..4]
             if need_combined:
                 t3 = time.perf_counter()
                 combined_max = CellStatistics([fire_final, insect_final, harvest_ras], "MAXIMUM", "DATA")
