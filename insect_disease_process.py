@@ -184,6 +184,7 @@ def main():
     """
     Parse --period argument if provided; otherwise run for all configured periods.
     """
+    cfg.write_run_parameters_doc()
     parser = argparse.ArgumentParser(
         description="Run Insect/Disease processing for a single user-specified period (or all periods)."
     )

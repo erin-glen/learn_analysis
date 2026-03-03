@@ -24,6 +24,8 @@ def main():
     """
     logging.info("Starting insect_disease_merge...")
 
+    cfg.write_run_parameters_doc()
+
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")
 

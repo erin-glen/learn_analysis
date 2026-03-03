@@ -101,6 +101,8 @@ def main(selected_steps: Sequence[str] | None = None, tile_ids: Iterable[str] | 
     Make sure 'insect_disease_process.py' is already done.
     """
     logging.info("========== Disturbance Workflow Started ==========")
+
+    cfg.write_run_parameters_doc()
     logging.warning("Ensure 'insect_disease_process.py' has been run in the GDAL environment first.")
 
     steps_to_run = list(selected_steps) if selected_steps else [name for name, _, _ in STEP_SEQUENCE]

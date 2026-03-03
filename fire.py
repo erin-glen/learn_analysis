@@ -91,6 +91,8 @@ def _find_raw_mtbs_raster(year: int) -> str | None:
 def main():
     logging.info("Starting fire.py with Year-by-Year Reclassification + Period Combination.")
 
+    cfg.write_run_parameters_doc()
+
     # Set up ArcPy environment
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.snapRaster = cfg.NLCD_RASTER

@@ -111,6 +111,8 @@ def _warn_if_misaligned(tcc_path, ref_path):
 
 def main():
     logging.info("Starting NLCD TCC ABSOLUTE (pp) change processing.")
+
+    cfg.write_run_parameters_doc()
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
     arcpy.env.pyramid = "NONE"

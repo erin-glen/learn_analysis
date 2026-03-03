@@ -20,6 +20,23 @@ logging.basicConfig(
 BASE_DIR = r"C:\GIS\Data\LEARN\Disturbances"
 
 # --------------------------------------------------------------------
+# OUTPUT VERSIONING
+# --------------------------------------------------------------------
+USE_DATESTAMPED_OUTPUT_DIRS = False
+OUTPUT_DATESTAMP = ""  # when blank and date-stamping is enabled, defaults to YYYYMMDD_HHMMSS
+
+
+def _output_stamp() -> str:
+    return OUTPUT_DATESTAMP or datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _with_output_stamp(path: str) -> str:
+    if not USE_DATESTAMPED_OUTPUT_DIRS:
+        return path
+    return os.path.join(path, _output_stamp())
+
+
+# --------------------------------------------------------------------
 # NLCD ANALYSIS YEARS (canonical endpoints for standard NLCD periods)
 # --------------------------------------------------------------------
 # Standard NLCD endpoints you want covered across the workflow.
@@ -31,14 +48,14 @@ NLCD_ANALYSIS_YEARS = [2001, 2004, 2006, 2008, 2011, 2013, 2016, 2019, 2021, 202
 # --------------------------------------------------------------------
 INSECT_GDB_DIR = os.path.join(BASE_DIR, "ADS")
 INSECT_RAW_DIR = os.path.join(INSECT_GDB_DIR, "Raw")
-INSECT_OUTPUT_DIR = os.path.join(INSECT_GDB_DIR, "Processed")
-INSECT_FINAL_DIR = os.path.join(INSECT_GDB_DIR, "Final")
+INSECT_OUTPUT_DIR = _with_output_stamp(os.path.join(INSECT_GDB_DIR, "Processed"))
+INSECT_FINAL_DIR = _with_output_stamp(os.path.join(INSECT_GDB_DIR, "Final"))
 
 # --------------------------------------------------------------------
 # Hansen (Hansen Global Forest Change harvest proxy)
 # --------------------------------------------------------------------
 HANSEN_INPUT_DIR = os.path.join(BASE_DIR, "Hansen")
-HANSEN_OUTPUT_DIR = os.path.join(HANSEN_INPUT_DIR, "Processed")
+HANSEN_OUTPUT_DIR = _with_output_stamp(os.path.join(HANSEN_INPUT_DIR, "Processed"))
 
 # --------------------------------------------------------------------
 # NLCD TREE CANOPY (TCC) INPUTS
@@ -109,18 +126,18 @@ if not os.path.exists(NLCD_RASTER):
 NLCD_HARVEST_ROOT = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity"
 
 # Final disturbance outputs (combined; 1–4 harvest, 5 insect low, 6 insect high, 8 low fire, 10 high fire)
-NLCD_FINAL_DIR = os.path.join(NLCD_HARVEST_ROOT, "final_disturbances")
+NLCD_FINAL_DIR = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "final_disturbances"))
 
 # “What will be counted as harvest” after masking out fire/insect (1–4 only)
-NLCD_FINAL_HARVEST_ONLY_DIR = os.path.join(NLCD_HARVEST_ROOT, "1-4")
+NLCD_FINAL_HARVEST_ONLY_DIR = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "1-4"))
 
 # Convenience disturbance layers (class-coded rasters)
-NLCD_FINAL_INSECT_DIR = os.path.join(NLCD_HARVEST_ROOT, "insect")
-NLCD_FINAL_FIRE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "fire")
+NLCD_FINAL_INSECT_DIR = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "insect"))
+NLCD_FINAL_FIRE_DIR   = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "fire"))
 
 # NLCD TCC-based derivations (not masked by other layers)
-NLCD_TCC_CHANGE_DIR       = os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_change")       # absolute pp change
-NLCD_HARVEST_SEVERITY_DIR = os.path.join(NLCD_HARVEST_ROOT, "Harvest_severity")         # pp-based severity (0–4)
+NLCD_TCC_CHANGE_DIR       = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_change"))       # absolute pp change
+NLCD_HARVEST_SEVERITY_DIR = _with_output_stamp(os.path.join(NLCD_HARVEST_ROOT, "Harvest_severity"))         # pp-based severity (0–4)
 
 for _d in [
     NLCD_HARVEST_ROOT,
@@ -201,10 +218,51 @@ def harvest_raster_path(period_name: str, workflow: str | None = None) -> str:
 
 def final_combined_dir(workflow: str | None = None) -> str:
     # All methods write combined finals here; method appears in filename (disturb_{abs|hansen}_{period}.tif)
-    if USE_DATESTAMPED_FINAL_OUTPUT_DIR:
+    if USE_DATESTAMPED_FINAL_OUTPUT_DIR and not USE_DATESTAMPED_OUTPUT_DIRS:
         stamp = FINAL_OUTPUT_DATESTAMP or datetime.now().strftime("%Y%m%d_%H%M%S")
         return os.path.join(NLCD_FINAL_DIR, stamp)
     return NLCD_FINAL_DIR
+
+
+def _pipeline_output_dirs() -> list[str]:
+    return [
+        INSECT_OUTPUT_DIR,
+        INSECT_FINAL_DIR,
+        HANSEN_OUTPUT_DIR,
+        FIRE_OUTPUT_DIR,
+        INTERMEDIATE_COMBINED_DIR,
+        NLCD_FINAL_DIR,
+        NLCD_FINAL_HARVEST_ONLY_DIR,
+        NLCD_FINAL_INSECT_DIR,
+        NLCD_FINAL_FIRE_DIR,
+        NLCD_TCC_CHANGE_DIR,
+        NLCD_HARVEST_SEVERITY_DIR,
+    ]
+
+
+def write_run_parameters_doc(filename: str = "run_parameters.txt") -> None:
+    lines = [
+        "LEARN disturbance pipeline run parameters",
+        f"generated_at={datetime.now().isoformat()}",
+        f"USE_DATESTAMPED_OUTPUT_DIRS={USE_DATESTAMPED_OUTPUT_DIRS}",
+        f"OUTPUT_DATESTAMP={OUTPUT_DATESTAMP or '<auto>'}",
+        f"USE_DATESTAMPED_FINAL_OUTPUT_DIR={USE_DATESTAMPED_FINAL_OUTPUT_DIR}",
+        f"FINAL_OUTPUT_DATESTAMP={FINAL_OUTPUT_DATESTAMP or '<auto>'}",
+        f"FIRE_LOW_SEVERITY_CODE={FIRE_LOW_SEVERITY_CODE}",
+        f"FINAL_FIRE_LOW_CODE={FINAL_FIRE_LOW_CODE}",
+        f"FINAL_FIRE_HIGH_CODE={FINAL_FIRE_HIGH_CODE}",
+        f"FINAL_INSECT_CODE={FINAL_INSECT_CODE}",
+        f"FINAL_INSECT_HIGH_CODE={globals().get('FINAL_INSECT_HIGH_CODE', 'NA')}",
+        f"TIME_PERIODS_ALL={list(TIME_PERIODS_ALL.keys())}",
+    ]
+    body = "\n".join(lines) + "\n"
+    for out_dir in _pipeline_output_dirs():
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, filename), "w", encoding="utf-8") as f:
+                f.write(body)
+        except Exception as exc:
+            logging.warning("Failed to write parameters doc in %s: %s", out_dir, exc)
 
 # --------------------------------------------------------------------
 # FIRE
@@ -214,12 +272,12 @@ def final_combined_dir(workflow: str | None = None) -> str:
 FIRE_DIR = os.path.join(BASE_DIR, "Fire")
 FIRE_ROOT = FIRE_DIR  # back-compat symbol; points to Fire base
 FIRE_RAW_DIR = os.path.join(FIRE_DIR, "Raw")
-FIRE_OUTPUT_DIR = os.path.join(FIRE_DIR, "Processed")
+FIRE_OUTPUT_DIR = _with_output_stamp(os.path.join(FIRE_DIR, "Processed"))
 
 # --------------------------------------------------------------------
 # LEGACY OUTPUT ROOTS (back-compat)
 # --------------------------------------------------------------------
-INTERMEDIATE_COMBINED_DIR = os.path.join(BASE_DIR, "Intermediate")
+INTERMEDIATE_COMBINED_DIR = _with_output_stamp(os.path.join(BASE_DIR, "Intermediate"))
 FINAL_COMBINED_ROOT_DIR = os.path.join(BASE_DIR, "FinalCombined")
 # Keep legacy symbol pointing to the new final directory for compatibility
 FINAL_COMBINED_DIR = NLCD_FINAL_DIR

@@ -70,6 +70,8 @@ def main(tile_ids: Iterable[str] | None = None):
     """
     logging.info("Starting harvest_other.py (Hansen-based harvest/other).")
 
+    cfg.write_run_parameters_doc()
+
     # ArcPy environment setup
     arcpy.env.overwriteOutput = True
     arcpy.CheckOutExtension("Spatial")

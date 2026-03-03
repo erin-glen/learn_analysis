@@ -114,6 +114,8 @@ def _warn_if_misaligned(path, ref_path, label):
 def main():
     logging.info("Starting final_disturbance.py... (building: %s)", ", ".join(FINAL_HARVEST_WORKFLOWS))
 
+    cfg.write_run_parameters_doc()
+
     arcpy.CheckOutExtension("Spatial")
     arcpy.env.overwriteOutput = True
     arcpy.env.pyramid = "NONE"
