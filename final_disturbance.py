@@ -7,8 +7,9 @@ folder structure.
 
 Final codes:
   1–4 : Harvest severity (as provided by the chosen harvest workflow; Hansen is binary=1)
-  5   : Insect/Disease presence  (presence -> 5, else 0)
-  6   : Low-severity fire        (preserved as a distinct class)
+  5   : Low-severity insect/disease
+  6   : High-severity insect/disease
+  8   : Low-severity fire        (preserved as a distinct class)
   10  : Moderate/high fire       (preserved as a distinct class)
 
 Also exports a “harvest_counted” layer per method:
@@ -65,7 +66,7 @@ def _save_byte_tif(ras, out_tif, *, overwrite=False, lzw=True):
 
 def _encode_fire_classes(fire_ras: Raster) -> Raster:
     low_code = getattr(cfg, "FIRE_LOW_SEVERITY_CODE", 3)
-    low_out = getattr(cfg, "FINAL_FIRE_LOW_CODE", 6)
+    low_out = getattr(cfg, "FINAL_FIRE_LOW_CODE", 8)
     high_out = getattr(cfg, "FINAL_FIRE_HIGH_CODE", 10)
     logging.info("Encoding fire classes: low(%s)->%s, high(>0 and !=%s)->%s", low_code, low_out, low_code, high_out)
     return Con(fire_ras == low_code, low_out, Con(fire_ras > 0, high_out, 0))
@@ -120,6 +121,7 @@ def main():
     _log_grid_info("REF", cfg.NLCD_RASTER)
 
     final_out_dir = cfg.final_combined_dir()  # same centralized folder for all methods
+    cfg.write_run_metadata([final_out_dir, cfg.NLCD_FINAL_HARVEST_ONLY_DIR, cfg.NLCD_FINAL_INSECT_DIR, cfg.NLCD_FINAL_FIRE_DIR], script_name="final_disturbance.py", parameters={"workflows": ",".join(FINAL_HARVEST_WORKFLOWS)})
     os.makedirs(final_out_dir, exist_ok=True)
     logging.info("Final combined rasters directory => %s", final_out_dir)
 
@@ -155,11 +157,16 @@ def main():
         fire_final = _encode_fire_classes(fire_ras)
         logging.info("Prepared fire presence for %s in %.1f s", period, time.perf_counter() - t1)
 
-        # Insect presence: presence -> configured insect code (default 5)
+        # Insect classes: preserve low/high severity where present.
         t2 = time.perf_counter()
-        insect_code = getattr(cfg, "FINAL_INSECT_CODE", 5)
-        insect_final = Con(insect_ras > 0, insect_code, 0)
-        logging.info("Prepared insect presence for %s in %.1f s", period, time.perf_counter() - t2)
+        insect_low_code = getattr(cfg, "FINAL_INSECT_LOW_CODE", 5)
+        insect_high_code = getattr(cfg, "FINAL_INSECT_HIGH_CODE", 6)
+        insect_final = Con(
+            insect_ras == insect_high_code,
+            insect_high_code,
+            Con(insect_ras > 0, insect_low_code, 0)
+        )
+        logging.info("Prepared insect classes for %s in %.1f s", period, time.perf_counter() - t2)
 
         # Save presence exports (shared by both methods) if missing
         out_insect = os.path.join(cfg.NLCD_FINAL_INSECT_DIR, f"insect_{period}.tif")
@@ -196,7 +203,7 @@ def main():
 
             harvest_ras = Raster(harvest_path)
 
-            # Combined MAX (DATA): [fire={low/high}, insect=5, harvest=1..4]
+            # Combined MAX (DATA): [fire={low/high}, insect={low/high}, harvest=1..4]
             if need_combined:
                 t3 = time.perf_counter()
                 combined_max = CellStatistics([fire_final, insect_final, harvest_ras], "MAXIMUM", "DATA")
