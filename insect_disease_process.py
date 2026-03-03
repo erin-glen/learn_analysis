@@ -24,6 +24,7 @@ def _process_period(period: str):
     1) Convert the period string into a list of years [2019, 2020, 2021].
     2) For each region in cfg.REGIONS, extract features from the GDB for those years.
     3) Rasterize and save output as: insect_damage_{region}_{period}.tif
+
     """
     # Parse the string "YYYY_YYYY" => [YYYY, YYYY+1, ..., YYYY2]
     try:
@@ -95,16 +96,30 @@ def _process_period(period: str):
             logging.info(f"Already exists: {output_raster}, skipping.")
             continue
 
-        # Build SQL:
-        #   SELECT ..., damage_val
-        #   WHERE SURVEY_YEAR in (2019,2020,2021,...)
-        #   damage_val = 5 if 'Mortality - Previously Undocumented', else 0
+        # Build SQL using DAMAGE_TYPE_CODE severity bins:
+        #   high -> 6, low -> 5, else 0
         year_str = ",".join(map(str, years))
-        sql_query = (
-            "SELECT *, CASE WHEN DAMAGE_TYPE = 'Mortality - Previously Undocumented' "
-            "THEN 5 ELSE 0 END AS damage_val "
-            f"FROM '{layer_name}' WHERE SURVEY_YEAR IN ({year_str})"
-        )
+
+        high_codes = [2, 11, 15, 16, 17]
+        low_codes = [1, 3, 4, 5, 8, 10, 12, 13, 14, 18, 19]
+
+        code_str_high = ",".join(map(str, high_codes))
+        code_str_low = ",".join(map(str, low_codes))
+        code_str_all = ",".join(map(str, high_codes + low_codes))
+
+        sql_query = f"""
+SELECT
+  *,
+  CASE
+    WHEN DAMAGE_TYPE_CODE IN ({code_str_high}) THEN 6
+    WHEN DAMAGE_TYPE_CODE IN ({code_str_low})  THEN 5
+    ELSE 0
+  END AS damage_val
+FROM "{layer_name}"
+WHERE SURVEY_YEAR IN ({year_str})
+  AND DAMAGE_TYPE_CODE IN ({code_str_all})
+ORDER BY damage_val ASC, OBJECTID ASC
+"""
 
         # 3A) Convert relevant features to a temp GPKG
         temp_vector = os.path.join(

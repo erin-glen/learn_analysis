@@ -1,6 +1,7 @@
 # disturbance_config.py
 
 import os
+from datetime import datetime
 import glob
 import logging
 from typing import Iterable, List, Sequence
@@ -107,15 +108,15 @@ if not os.path.exists(NLCD_RASTER):
 # --------------------------------------------------------------------
 NLCD_HARVEST_ROOT = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity"
 
-# Final disturbance outputs (combined; 1–4 harvest, 5 insect, 10 fire)
+# Final disturbance outputs (combined; 1–4 harvest, 5 insect low, 6 insect high, 8 low fire, 10 high fire)
 NLCD_FINAL_DIR = os.path.join(NLCD_HARVEST_ROOT, "final_disturbances")
 
 # “What will be counted as harvest” after masking out fire/insect (1–4 only)
 NLCD_FINAL_HARVEST_ONLY_DIR = os.path.join(NLCD_HARVEST_ROOT, "1-4")
 
-# Convenience presence layers
-NLCD_FINAL_INSECT_DIR = os.path.join(NLCD_HARVEST_ROOT, "5")
-NLCD_FINAL_FIRE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "10")
+# Convenience disturbance layers (class-coded rasters)
+NLCD_FINAL_INSECT_DIR = os.path.join(NLCD_HARVEST_ROOT, "insect")
+NLCD_FINAL_FIRE_DIR   = os.path.join(NLCD_HARVEST_ROOT, "fire")
 
 # NLCD TCC-based derivations (not masked by other layers)
 NLCD_TCC_CHANGE_DIR       = os.path.join(NLCD_HARVEST_ROOT, "Tree_canopy_change")       # absolute pp change
@@ -138,9 +139,16 @@ for _d in [
 # Severity thresholds (upper bounds) for pp-based severity 1–4
 NLCD_TCC_SEVERITY_BREAKS = [25, 50, 75, 100]
 
-# Fire masking (preserve harvest=3 downstream)
-MASK_LOW_SEVERITY_FIRE = True
+# Fire/insect coding in final products
 FIRE_LOW_SEVERITY_CODE = 3
+FINAL_FIRE_LOW_CODE = 8
+FINAL_FIRE_HIGH_CODE = 10
+FINAL_INSECT_CODE = 5
+FINAL_INSECT_HIGH_CODE = 6
+
+# Optional date-stamped output folder (for historical reruns/versioning)
+USE_DATESTAMPED_FINAL_OUTPUT_DIR = False
+FINAL_OUTPUT_DATESTAMP = ""  # when blank and date-stamping is enabled, defaults to YYYYMMDD_HHMMSS
 
 # Performance toggles
 PARALLEL_PROCESSING_FACTOR = "90%"  # "100%" or integer cores, e.g., "8"
@@ -193,6 +201,9 @@ def harvest_raster_path(period_name: str, workflow: str | None = None) -> str:
 
 def final_combined_dir(workflow: str | None = None) -> str:
     # All methods write combined finals here; method appears in filename (disturb_{abs|hansen}_{period}.tif)
+    if USE_DATESTAMPED_FINAL_OUTPUT_DIR:
+        stamp = FINAL_OUTPUT_DATESTAMP or datetime.now().strftime("%Y%m%d_%H%M%S")
+        return os.path.join(NLCD_FINAL_DIR, stamp)
     return NLCD_FINAL_DIR
 
 # --------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # insect_disease_merge.py
 """
-Merges per-region insect/disease rasters (values {0,5})
+Merges per-region insect/disease rasters (values {0,5,6})
 into a single CONUS raster for each time period.
 
 Example
@@ -59,7 +59,7 @@ def main():
 
         logging.info(f"Merging {len(region_rasters)} region rasters => {out_path}")
 
-        # Mosaic method="MAXIMUM" => 5 overrides 0 if there's overlap
+        # Mosaic method="MAXIMUM" => 6 (high) overrides 5 (low) if there's overlap
         arcpy.management.MosaicToNewRaster(
             input_rasters=region_rasters,
             output_location=cfg.INSECT_FINAL_DIR,
