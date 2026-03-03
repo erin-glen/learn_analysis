@@ -1,6 +1,6 @@
 # insect_disease_merge.py
 """
-Merges per-region insect/disease rasters (values {0,5})
+Merges per-region insect/disease rasters (values {0,5,6})
 into a single CONUS raster for each time period.
 
 Example

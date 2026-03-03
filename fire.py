@@ -100,6 +100,7 @@ def main():
     arcpy.env.overwriteOutput = True
 
     periods = _get_fire_periods()
+    cfg.write_run_metadata([cfg.FIRE_OUTPUT_DIR], script_name="fire.py", parameters={"periods": ",".join(periods.keys())})
 
     # ---------------------------------------------------------------
     # A. Year-by-Year Reclassification
