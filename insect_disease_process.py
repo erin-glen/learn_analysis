@@ -53,6 +53,12 @@ def _process_period(period: str):
 
     logging.info(f"NLCD: bounds={nl_bounds}, res={nl_res}, crs={nl_crs}")
 
+    cfg.write_run_metadata(
+        [cfg.INSECT_OUTPUT_DIR, cfg.INSECT_FINAL_DIR],
+        script_name="insect_disease_process.py",
+        parameters={"period": period, "start_year": start_year, "end_year": end_year},
+    )
+
     # ---------------------------------------------------------
     # 3. Region-by-region extraction & rasterization
     # ---------------------------------------------------------
@@ -99,12 +105,27 @@ def _process_period(period: str):
         # Build SQL:
         #   SELECT ..., damage_val
         #   WHERE SURVEY_YEAR in (2019,2020,2021,...)
-        #   damage_val = 5 for mortality classes, else 0
+        #   damage_val = 6 for high-severity and 5 for low-severity
+        #     insect/disease disturbance classes.
         year_str = ",".join(map(str, years))
+
+        high_codes = [2, 11, 15, 16, 17]
+        low_codes = [1, 3, 4, 5, 8, 10, 12, 13, 14, 18, 19]
+
+        code_str_high = ",".join(map(str, high_codes))
+        code_str_low = ",".join(map(str, low_codes))
+        code_str_all = ",".join(map(str, high_codes + low_codes))
+
         sql_query = (
-            "SELECT *, CASE WHEN DAMAGE_TYPE IN ('Mortality - Previously Undocumented', 'Mortality') "
-            "THEN 5 ELSE 0 END AS damage_val "
-            f"FROM '{layer_name}' WHERE SURVEY_YEAR IN ({year_str})"
+            "SELECT *, "
+            "CASE "
+            f"WHEN DAMAGE_TYPE_CODE IN ({code_str_high}) THEN 6 "
+            f"WHEN DAMAGE_TYPE_CODE IN ({code_str_low}) THEN 5 "
+            "ELSE 0 END AS damage_val "
+            f"FROM '{layer_name}' "
+            f"WHERE SURVEY_YEAR IN ({year_str}) "
+            f"AND DAMAGE_TYPE_CODE IN ({code_str_all}) "
+            "ORDER BY damage_val ASC"
         )
 
         # 3A) Convert relevant features to a temp GPKG
@@ -157,7 +178,7 @@ def _process_period(period: str):
         try:
             subprocess.run(raster_cmd, check=True)
         except subprocess.CalledProcessError as e:
-            logging.error(f"Error rasterizing region={region}, period={args.period}: {e}")
+            logging.error(f"Error rasterizing region={region}, period={period}: {e}")
             continue
         finally:
             if os.path.exists(temp_vector):
