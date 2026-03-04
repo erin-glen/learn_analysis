@@ -125,7 +125,7 @@ def _process_period(period: str):
             f"FROM '{layer_name}' "
             f"WHERE SURVEY_YEAR IN ({year_str}) "
             f"AND DAMAGE_TYPE_CODE IN ({code_str_all}) "
-            "ORDER BY damage_val ASC, OBJECTID ASC"
+            "ORDER BY damage_val ASC"
         )
 
         # 3A) Convert relevant features to a temp GPKG
