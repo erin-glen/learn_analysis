@@ -61,7 +61,7 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     all_results = []
 
     # Determine the recategorize_mode flag based on the mode parameter
-    recategorize_mode = True
+    recategorize_mode = False
     if mode == 'recategorize':
         recategorize_mode = True
         arcpy.AddMessage("Recategorization mode is enabled.")
