@@ -4,7 +4,7 @@ import os
 # Base directories
 DATA_FOLDER = r"C:\GIS\Data\LEARN\SourceData"
 OUTPUT_BASE_DIR = r"C:\GIS\Data\LEARN\Outputs"
-DISTURBANCE_FOLDER = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\final_disturbances"
+DISTURBANCE_FOLDER = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\final_disturbances\20260113"
 
 # Valid years for analysis
 VALID_YEARS = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019", "2021","2023"]
@@ -159,3 +159,4 @@ def get_input_config(year1, year2, aoi_name=None, tree_canopy_source=None):
     input_config['c_to_co2'] = config['c_to_co2']
 
     return input_config
+
