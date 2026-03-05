@@ -104,19 +104,15 @@ def main(selected_steps: Sequence[str] | None = None, tile_ids: Iterable[str] | 
     logging.warning("Ensure 'insect_disease_process.py' has been run in the GDAL environment first.")
 
     steps_to_run = list(selected_steps) if selected_steps else [name for name, _, _ in STEP_SEQUENCE]
+    tracked_output_dirs = [
+        cfg.INSECT_FINAL_DIR,
+        cfg.HANSEN_OUTPUT_DIR,
+        cfg.FIRE_OUTPUT_DIR,
+        cfg.INTERMEDIATE_COMBINED_DIR,
+        *cfg.PRIMARY_OUTPUT_DIRS,
+    ]
     cfg.write_run_metadata(
-        [
-            cfg.INSECT_FINAL_DIR,
-            cfg.HANSEN_OUTPUT_DIR,
-            cfg.FIRE_OUTPUT_DIR,
-            cfg.INTERMEDIATE_COMBINED_DIR,
-            cfg.NLCD_FINAL_DIR,
-            cfg.NLCD_FINAL_HARVEST_ONLY_DIR,
-            cfg.NLCD_FINAL_INSECT_DIR,
-            cfg.NLCD_FINAL_FIRE_DIR,
-            cfg.NLCD_HARVEST_SEVERITY_DIR,
-            cfg.NLCD_TCC_CHANGE_DIR,
-        ],
+        tracked_output_dirs,
         script_name="run_disturbance.py",
         parameters={"steps": ",".join(steps_to_run), "tile_ids": ",".join(tile_ids or [])},
     )
