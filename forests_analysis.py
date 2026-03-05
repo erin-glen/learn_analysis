@@ -8,7 +8,7 @@ from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
 from funcs import save_results, summarize_ghg
 
-def main(mode=None):
+def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     """
     Main function to execute forest analysis.
 
@@ -25,9 +25,9 @@ def main(mode=None):
     year2 = input("Enter Year 2: ").strip()
     assert year2 in VALID_YEARS, f"{year2} is not a valid year."
 
-    # Hardcoded AOI shapefile path and unique ID field
-    aoi_shapefile = r"C:\GIS\Data\LEARN\SourceData\AOI\PADUS_BLM_USFS_STATE_PRJ.shp"
-    id_field = "FID"
+    # Default AOI shapefile path and unique ID field
+    if aoi_shapefile is None:
+        aoi_shapefile = r"C:\GIS\Data\LEARN\SourceData\AOI\PADUS_BLM_USFS_STATE_PRJ.shp"
 
     # Input configuration
     input_config = get_input_config(year1, year2)
@@ -48,7 +48,8 @@ def main(mode=None):
 
     # Output directory
     date_str = start_time.strftime("%Y_%m_%d")
-    output_folder_name = f"{date_str}_{year1}_{year2}_BatchProcessing"
+    label = run_label or os.path.splitext(os.path.basename(aoi_shapefile))[0]
+    output_folder_name = f"{date_str}_{year1}_{year2}_{label}_BatchProcessing"
     output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
 
