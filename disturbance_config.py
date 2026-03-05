@@ -31,6 +31,13 @@ def _dated_output_dir(base_dir: str) -> str:
         return os.path.join(base_dir, OUTPUT_DATE_SUBDIR)
     return base_dir
 
+
+def ensure_output_dirs(paths: Iterable[str]) -> None:
+    """Create output directories when paths are present/non-empty."""
+    for path in paths:
+        if path:
+            os.makedirs(path, exist_ok=True)
+
 def write_run_metadata(output_dirs: Iterable[str], script_name: str, parameters: dict | None = None) -> None:
     """Write a lightweight run-parameter text log into each output directory."""
     payload = dict(parameters or {})
@@ -172,7 +179,7 @@ AOI_MASK_BUILD_MODE = "forest_remains_forest"
 # 41: Deciduous Forest, 42: Evergreen Forest, 43: Mixed Forest
 NLCD_FOREST_CLASSES = [41, 42, 43]
 
-for _d in [
+PRIMARY_OUTPUT_DIRS = [
     NLCD_HARVEST_ROOT,
     NLCD_FINAL_DIR,
     NLCD_FINAL_HARVEST_ONLY_DIR,
@@ -181,8 +188,8 @@ for _d in [
     NLCD_TCC_CHANGE_DIR,
     NLCD_HARVEST_SEVERITY_DIR,
     NLCD_AOI_MASK_DIR,
-]:
-    os.makedirs(_d, exist_ok=True)
+]
+ensure_output_dirs(PRIMARY_OUTPUT_DIRS)
 
 # --------------------------------------------------------------------
 # SEVERITY & PROCESSING KNOBS
@@ -277,15 +284,15 @@ FINAL_COMBINED_ROOT_DIR = os.path.join(BASE_DIR, "FinalCombined")
 # Keep legacy symbol pointing to the new final directory for compatibility
 FINAL_COMBINED_DIR = NLCD_FINAL_DIR
 
-for _d in [
+SECONDARY_OUTPUT_DIRS = [
     INSECT_OUTPUT_DIR,
     INSECT_FINAL_DIR,
     HANSEN_OUTPUT_DIR,
     FIRE_OUTPUT_DIR,
     INTERMEDIATE_COMBINED_DIR,
     FINAL_COMBINED_ROOT_DIR,
-]:
-    os.makedirs(_d, exist_ok=True)
+]
+ensure_output_dirs(SECONDARY_OUTPUT_DIRS)
 
 # --------------------------------------------------------------------
 # REGIONS & TIME PERIODS
