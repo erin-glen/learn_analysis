@@ -20,6 +20,7 @@ Also exports a “harvest_counted” layer per method:
 import os
 import time
 import logging
+import argparse
 import arcpy
 from arcpy.sa import *  # noqa
 import disturbance_config as cfg
@@ -104,7 +105,46 @@ def _warn_if_misaligned(path, ref_path, label):
     except Exception:
         pass
 
-def main():
+
+def _parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build final disturbance outputs with optional input directory/date overrides.",
+    )
+    parser.add_argument(
+        "--fire-input-dir",
+        help="Optional explicit directory containing fire_{period}.tif inputs.",
+    )
+    parser.add_argument(
+        "--fire-input-date-subdir",
+        help="Optional date subfolder under cfg.FIRE_OUTPUT_ROOT_DIR to read fire inputs from (e.g., 20260304).",
+    )
+    parser.add_argument(
+        "--insect-input-dir",
+        help="Optional explicit directory containing insect_damage_{period}.tif inputs.",
+    )
+    parser.add_argument(
+        "--insect-input-date-subdir",
+        help="Optional date subfolder under cfg.INSECT_FINAL_ROOT_DIR to read insect inputs from (e.g., 20260304).",
+    )
+    parser.add_argument(
+        "--harvest-input-dir",
+        help="Optional explicit directory containing harvest inputs for all workflows.",
+    )
+    parser.add_argument(
+        "--harvest-input-date-subdir",
+        help="Optional date subfolder under each harvest workflow root output dir.",
+    )
+    return parser.parse_args()
+
+def main(
+    *,
+    fire_input_dir: str | None = None,
+    fire_input_date_subdir: str | None = None,
+    insect_input_dir: str | None = None,
+    insect_input_date_subdir: str | None = None,
+    harvest_input_dir: str | None = None,
+    harvest_input_date_subdir: str | None = None,
+):
     logging.info("Starting final_disturbance.py... (building: %s)", ", ".join(FINAL_HARVEST_WORKFLOWS))
 
     arcpy.CheckOutExtension("Spatial")
@@ -121,9 +161,46 @@ def main():
     _log_grid_info("REF", cfg.NLCD_RASTER)
 
     final_out_dir = cfg.final_combined_dir()  # same centralized folder for all methods
-    cfg.write_run_metadata([final_out_dir, cfg.NLCD_FINAL_HARVEST_ONLY_DIR, cfg.NLCD_FINAL_INSECT_DIR, cfg.NLCD_FINAL_FIRE_DIR], script_name="final_disturbance.py", parameters={"workflows": ",".join(FINAL_HARVEST_WORKFLOWS)})
+    fire_source_dir = cfg.resolve_dated_input_dir(
+        default_dir=cfg.FIRE_OUTPUT_DIR,
+        root_dir=cfg.FIRE_OUTPUT_ROOT_DIR,
+        date_subdir=fire_input_date_subdir,
+        explicit_dir=fire_input_dir,
+    )
+    insect_source_dir = cfg.resolve_dated_input_dir(
+        default_dir=cfg.INSECT_FINAL_DIR,
+        root_dir=cfg.INSECT_FINAL_ROOT_DIR,
+        date_subdir=insect_input_date_subdir,
+        explicit_dir=insect_input_dir,
+    )
+
+    harvest_source_by_workflow = {}
+    for wf in FINAL_HARVEST_WORKFLOWS:
+        hcfg = cfg.harvest_product_config(wf)
+        workflow_default_dir = hcfg["raster_directory"]
+        workflow_root_dir = os.path.dirname(workflow_default_dir)
+        harvest_source_by_workflow[wf] = cfg.resolve_dated_input_dir(
+            default_dir=workflow_default_dir,
+            root_dir=workflow_root_dir,
+            date_subdir=harvest_input_date_subdir,
+            explicit_dir=harvest_input_dir,
+        )
+
+    cfg.write_run_metadata(
+        [final_out_dir, cfg.NLCD_FINAL_HARVEST_ONLY_DIR, cfg.NLCD_FINAL_INSECT_DIR, cfg.NLCD_FINAL_FIRE_DIR],
+        script_name="final_disturbance.py",
+        parameters={
+            "workflows": ",".join(FINAL_HARVEST_WORKFLOWS),
+            "fire_input_dir": fire_source_dir,
+            "insect_input_dir": insect_source_dir,
+            "harvest_input_dir": harvest_input_dir or f"date_subdir:{harvest_input_date_subdir or 'default'}",
+        },
+    )
     os.makedirs(final_out_dir, exist_ok=True)
     logging.info("Final combined rasters directory => %s", final_out_dir)
+    logging.info("Final input directories => fire: %s | insect: %s", fire_source_dir, insect_source_dir)
+    for wf in FINAL_HARVEST_WORKFLOWS:
+        logging.info("Final input directory => harvest[%s]: %s", wf, harvest_source_by_workflow[wf])
 
     # Summary accumulators
     processed = {wf: [] for wf in FINAL_HARVEST_WORKFLOWS}
@@ -131,8 +208,8 @@ def main():
 
     for period in cfg.TIME_PERIODS_ALL.keys():
         # Common inputs for all methods
-        fire_path   = os.path.join(cfg.FIRE_OUTPUT_DIR,   f"fire_{period}.tif")
-        insect_path = os.path.join(cfg.INSECT_FINAL_DIR,  f"insect_damage_{period}.tif")
+        fire_path   = os.path.join(fire_source_dir,   f"fire_{period}.tif")
+        insect_path = os.path.join(insect_source_dir, f"insect_damage_{period}.tif")
 
         if not (_exists(fire_path) and _exists(insect_path)):
             logging.error("Skipping all methods for %s — missing common inputs (fire/insect).", period)
@@ -180,7 +257,10 @@ def main():
         for wf in FINAL_HARVEST_WORKFLOWS:
             hcfg = cfg.harvest_product_config(wf)
             method_tag = hcfg.get("method_tag", "abs")  # 'abs' (or 'hansen' if used)
-            harvest_path = cfg.harvest_raster_path(period, workflow=wf)
+            harvest_path = os.path.join(
+                harvest_source_by_workflow[wf],
+                hcfg["raster_template"].format(period=period),
+            )
 
             if not _exists(harvest_path):
                 logging.error("Skipping %s for %s — missing harvest raster: %s", wf, period, harvest_path)
@@ -236,4 +316,12 @@ def main():
     logging.info("final_disturbance.py completed.")
 
 if __name__ == "__main__":
-    main()
+    args = _parse_cli_args()
+    main(
+        fire_input_dir=args.fire_input_dir,
+        fire_input_date_subdir=args.fire_input_date_subdir,
+        insect_input_dir=args.insect_input_dir,
+        insect_input_date_subdir=args.insect_input_date_subdir,
+        harvest_input_dir=args.harvest_input_dir,
+        harvest_input_date_subdir=args.harvest_input_date_subdir,
+    )

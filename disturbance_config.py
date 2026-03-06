@@ -32,6 +32,29 @@ def _dated_output_dir(base_dir: str) -> str:
     return base_dir
 
 
+def resolve_dated_input_dir(
+    *,
+    default_dir: str,
+    root_dir: str | None = None,
+    date_subdir: str | None = None,
+    explicit_dir: str | None = None,
+) -> str:
+    """Resolve an input directory with optional date-subdir or explicit override.
+
+    Priority:
+      1) explicit_dir (full path)
+      2) root_dir/date_subdir
+      3) default_dir
+    """
+    if explicit_dir:
+        return explicit_dir
+    if date_subdir:
+        if not root_dir:
+            raise ValueError("root_dir is required when date_subdir is provided")
+        return os.path.join(root_dir, date_subdir)
+    return default_dir
+
+
 def ensure_output_dirs(paths: Iterable[str]) -> None:
     """Create output directories when paths are present/non-empty."""
     for path in paths:

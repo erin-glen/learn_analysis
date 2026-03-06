@@ -85,6 +85,22 @@ def _parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         metavar="ID1,ID2",
         help="Comma-separated list of tile ids to include (forwarded to harvest).",
     )
+    parser.add_argument(
+        "--insect-input-date-subdir",
+        help="Optional date subfolder under INSECT_OUTPUT_ROOT_DIR used by insect_merge step.",
+    )
+    parser.add_argument(
+        "--final-fire-input-date-subdir",
+        help="Optional date subfolder under FIRE_OUTPUT_ROOT_DIR used by final step inputs.",
+    )
+    parser.add_argument(
+        "--final-insect-input-date-subdir",
+        help="Optional date subfolder under INSECT_FINAL_ROOT_DIR used by final step inputs.",
+    )
+    parser.add_argument(
+        "--final-harvest-input-date-subdir",
+        help="Optional date subfolder under harvest workflow output root used by final step inputs.",
+    )
     return parser.parse_args(argv)
 
 
@@ -95,7 +111,14 @@ def _combine_tile_args(tile_ids: Iterable[str], csv: str | None) -> list[str]:
     return combined
 
 
-def main(selected_steps: Sequence[str] | None = None, tile_ids: Iterable[str] | None = None):
+def main(
+    selected_steps: Sequence[str] | None = None,
+    tile_ids: Iterable[str] | None = None,
+    insect_input_date_subdir: str | None = None,
+    final_fire_input_date_subdir: str | None = None,
+    final_insect_input_date_subdir: str | None = None,
+    final_harvest_input_date_subdir: str | None = None,
+):
     """
     Runs the ArcPy-based scripts in sequence.
     Make sure 'insect_disease_process.py' is already done.
@@ -137,6 +160,14 @@ def main(selected_steps: Sequence[str] | None = None, tile_ids: Iterable[str] | 
             except TypeError:
                 # Backwards compatibility if workflow has not been updated to accept tile_ids
                 harvest_module.main()
+        elif step_name == "insect_merge":
+            insect_disease_merge.main(input_date_subdir=insect_input_date_subdir)
+        elif step_name == "final":
+            final_disturbance.main(
+                fire_input_date_subdir=final_fire_input_date_subdir,
+                insect_input_date_subdir=final_insect_input_date_subdir,
+                harvest_input_date_subdir=final_harvest_input_date_subdir,
+            )
         else:
             step_func()
 
@@ -145,4 +176,11 @@ def main(selected_steps: Sequence[str] | None = None, tile_ids: Iterable[str] | 
 if __name__ == "__main__":
     args = _parse_cli_args()
     combined_tiles = _combine_tile_args(args.tile_ids, args.tile_csv)
-    main(selected_steps=args.steps, tile_ids=combined_tiles or None)
+    main(
+        selected_steps=args.steps,
+        tile_ids=combined_tiles or None,
+        insect_input_date_subdir=args.insect_input_date_subdir,
+        final_fire_input_date_subdir=args.final_fire_input_date_subdir,
+        final_insect_input_date_subdir=args.final_insect_input_date_subdir,
+        final_harvest_input_date_subdir=args.final_harvest_input_date_subdir,
+    )
