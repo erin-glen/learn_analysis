@@ -2,6 +2,7 @@
 
 import forests_analysis
 from unittest.mock import patch
+import sys
 
 def run_analysis_for_period(year1, year2, mode=None):
     # Mock the input() calls in forests_analysis.py to return the desired years
@@ -9,6 +10,10 @@ def run_analysis_for_period(year1, year2, mode=None):
         forests_analysis.main(mode)
 
 if __name__ == "__main__":
+    mode = sys.argv[1].strip().lower() if len(sys.argv) > 1 else None
+    if mode not in (None, "test", "recategorize"):
+        raise ValueError("Mode must be one of: test, recategorize")
+
     # Define the inventory periods
     inventory_periods = [
         (2013, 2016),
@@ -19,4 +24,4 @@ if __name__ == "__main__":
 
     for year1, year2 in inventory_periods:
         print(f"\nRunning analysis for inventory period {year1}-{year2}")
-        run_analysis_for_period(year1, year2)
+        run_analysis_for_period(year1, year2, mode=mode)
