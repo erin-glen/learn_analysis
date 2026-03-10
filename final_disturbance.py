@@ -15,6 +15,7 @@ Final codes:
 Also exports a “harvest_counted” layer per method:
   harvest_counted_{method_tag}_{period}.tif
 = Harvest (1–4) after masking out any fire/insect (keeps only what will be counted as harvest).
+
 """
 
 import os
