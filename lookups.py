@@ -54,7 +54,7 @@ disturbanceLookup = {
 	2: 'harvest_25_50_HA',
 	3: 'harvest_50_75_HA',
 	4: 'harvest_75_100_HA',
-	5: 'insect_damage_HA',
+	6: 'insect_damage_HA',
 	10: 'fire_HA'
 }
 

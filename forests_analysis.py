@@ -61,9 +61,8 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     all_results = []
 
     # Determine the recategorize_mode flag based on the mode parameter
-    recategorize_mode = True
-    if mode == 'recategorize':
-        recategorize_mode = True
+    recategorize_mode = (mode == 'recategorize')
+    if recategorize_mode:
         arcpy.AddMessage("Recategorization mode is enabled.")
     elif mode == 'test':
         arcpy.AddMessage("Test mode is enabled. Only the first geography will be processed.")
@@ -74,8 +73,9 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
             geography_id, geometry = row
             arcpy.AddMessage(f"Processing Geography ID: {geography_id}")
 
+            aoi_temp = None
             try:
-                aoi_temp = arcpy.management.CopyFeatures(geometry, "in_memory\\aoi_temp")
+                aoi_temp = arcpy.management.CopyFeatures(geometry, f"in_memory\\aoi_temp_{idx}")
                 input_config["aoi"] = aoi_temp
                 input_config["geography_id"] = geography_id
 
@@ -123,7 +123,8 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
                 arcpy.AddError(f"Error processing Geography ID {geography_id}: {e}")
 
             finally:
-                arcpy.management.Delete(aoi_temp)
+                if aoi_temp:
+                    arcpy.management.Delete(aoi_temp)
 
             # If in test mode, process only the first feature
             if mode == 'test':
@@ -143,4 +144,4 @@ if __name__ == "__main__":
     # To run in recategorize mode, call main('recategorize')
     # To run in test mode, call main('test')
     # To run normally, call main()
-    main('recategorize')  # Example: enable recategorize mode
+    main()
