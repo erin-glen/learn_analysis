@@ -65,7 +65,7 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     if recategorize_mode:
         arcpy.AddMessage("Recategorization mode is enabled.")
     elif mode == 'test':
-        arcpy.AddMessage("Test mode is enabled. Only the first geography will be processed.")
+        arcpy.AddMessage("Test mode is enabled. Only the first 10 geographies will be processed.")
 
     # Process each geography
     with arcpy.da.SearchCursor(aoi_shapefile, [id_field, "SHAPE@"]) as cursor:
@@ -126,9 +126,9 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
                 if aoi_temp:
                     arcpy.management.Delete(aoi_temp)
 
-            # If in test mode, process only the first feature
-            if mode == 'test':
-                arcpy.AddMessage("Test mode enabled. Processed only the first feature.")
+            # If in test mode, process only the first 10 features
+            if mode == 'test' and idx >= 9:
+                arcpy.AddMessage("Test mode enabled. Processed first 10 features.")
                 break
 
     # Combine and save results
