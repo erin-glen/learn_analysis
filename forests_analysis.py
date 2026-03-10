@@ -8,6 +8,36 @@ from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
 from funcs import save_results, summarize_ghg
 
+
+def _validate_input_paths(input_config):
+    """Validate required raster/vector inputs exist before processing AOIs."""
+    required_keys = [
+        "nlcd_1",
+        "nlcd_2",
+        "forest_age_raster",
+        "carbon_ag_bg_us",
+        "carbon_sd_dd_lt",
+        "carbon_so",
+    ]
+
+    missing_paths = []
+
+    for key in required_keys:
+        path = input_config.get(key)
+        if path and not arcpy.Exists(path):
+            missing_paths.append((key, path))
+
+    for idx, path in enumerate(input_config.get("disturbance_rasters", []), start=1):
+        if path and not arcpy.Exists(path):
+            missing_paths.append((f"disturbance_rasters[{idx}]", path))
+
+    if missing_paths:
+        details = "\n".join([f"- {name}: {path}" for name, path in missing_paths])
+        raise FileNotFoundError(
+            "Missing required analysis inputs. Aborting before AOI processing:\n" + details
+        )
+
+
 def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     """
     Main function to execute forest analysis.
@@ -43,6 +73,9 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     # Ensure that emissions_factor and removals_factor are provided
     if emissions_factor is None or removals_factor is None:
         raise ValueError("Emissions factor and removals factor must be provided in the configuration.")
+
+    # Validate required paths before looping over AOI features
+    _validate_input_paths(input_config)
 
     start_time = dt.now()
 
