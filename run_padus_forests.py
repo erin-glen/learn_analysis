@@ -18,12 +18,7 @@ import os
 import sys
 from unittest.mock import patch
 
-# Make the repo root importable when running this file directly.
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
-
-import forests_analysis  # noqa: E402
+import forests_analysis
 
 AOI_SHAPEFILE = r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_cleaned.shp"
 ID_FIELD = "unit_id"
