@@ -8,7 +8,7 @@ from config import VALID_YEARS, CELL_SIZE, OUTPUT_BASE_DIR, get_input_config
 from analysis_core import perform_analysis
 from funcs import save_results, summarize_ghg
 
-def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
+def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None, output_base_dir=None):
     """
     Main function to execute forest analysis.
 
@@ -17,6 +17,11 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
                               - 'test' to run in test mode.
                               - 'recategorize' to enable recategorization based on disturbances.
                               Defaults to None.
+        aoi_shapefile (str, optional): Path to AOI shapefile. Defaults to PADUS state-level shapefile.
+        id_field (str, optional): Unique ID field in the AOI shapefile. Defaults to "FID".
+        run_label (str, optional): Label used in the output folder name. Defaults to the AOI basename.
+        output_base_dir (str, optional): Base directory for this run's output folder.
+                                         Defaults to config.OUTPUT_BASE_DIR.
     """
     # User inputs
     year1 = input("Enter Year 1: ").strip()
@@ -50,7 +55,8 @@ def main(mode=None, aoi_shapefile=None, id_field="FID", run_label=None):
     date_str = start_time.strftime("%Y_%m_%d")
     label = run_label or os.path.splitext(os.path.basename(aoi_shapefile))[0]
     output_folder_name = f"{date_str}_{year1}_{year2}_{label}_BatchProcessing"
-    output_path = os.path.join(OUTPUT_BASE_DIR, output_folder_name)
+    base_dir = output_base_dir or OUTPUT_BASE_DIR
+    output_path = os.path.join(base_dir, output_folder_name)
     os.makedirs(output_path, exist_ok=True)
 
     # Save configuration
