@@ -51,20 +51,24 @@ DISPLAY_NAMES = {
     "unit_nm":         "Unit Name",
     "state_nm":        "State",
     "gap_sts":         "GAP Status",
+    "roadless":        "Roadless",
+    "protection":      "Protected Status (GAP+Roadless)",
     "acres_nat":       "Unit Acres (PAD-US)",
     "fs_region":       "FS Region",
     "LEARN_Type":      "LEARN Type",
 }
 
 SHEETS = [
-    ("National Totals",     "frf_learn_totals.csv",         []),
-    ("By Agency",           "frf_learn_by_agency.csv",      ["mang_name"]),
-    ("By GAP Protection",   "frf_learn_by_protection.csv",  ["gap_sts"]),
-    ("By FS Region",        "frf_learn_by_fs_region.csv",   ["fs_region"]),
-    ("By State",            "frf_learn_by_state.csv",       ["state_nm"]),
+    ("National Totals",     "frf_learn_totals.csv",                  []),
+    ("By Agency",           "frf_learn_by_agency.csv",               ["mang_name"]),
+    ("By GAP Protection",   "frf_learn_by_protection.csv",           ["gap_sts"]),
+    ("By Protected Status", "frf_learn_by_protection_gap25.csv",      ["protection"]),
+    ("By GAP x Roadless",   "frf_learn_by_protection_roadless.csv",  ["gap_sts", "roadless"]),
+    ("By FS Region",        "frf_learn_by_fs_region.csv",            ["fs_region"]),
+    ("By State",            "frf_learn_by_state.csv",                ["state_nm"]),
     ("By Unit",             "frf_learn_by_unit.csv",
      ["Geography_ID", "mang_name", "unit_nm", "state_nm",
-      "gap_sts", "acres_nat", "fs_region"]),
+      "gap_sts", "roadless", "protection", "acres_nat", "fs_region"]),
 ]
 
 DATA_COLS = [
@@ -81,7 +85,7 @@ def write_readme(ws):
         ("Forest Remaining Forest (FRF) — LEARN GHG Inventory Summaries", True),
         ("", False),
         ("Source: LEARN national PAD-US unit-level forest runs, 2 recategorization modes x 4 inventory periods (2013–2016, 2016–2019, 2019–2021, 2021–2023).", False),
-        ("Coverage: All USFS and BLM management units in the conterminous US (605 units).", False),
+        ("Coverage: All USFS and BLM management units in the conterminous US, split by inventoried roadless area (605 units -> 903 polygons after the roadless split).", False),
         ("", False),
         ("How to read each data sheet", True),
         ("Each (Recat Mode, Inventory Period, area-of-interest) combination has 7 rows — one per LEARN category. Use Excel's filter buttons on the header row to drill in.", False),
@@ -101,6 +105,9 @@ def write_readme(ws):
         ("Conversion", True),
         ("Carbon and CO2 are related by molecular weight: 1 t C = 44/12 ≈ 3.667 t CO2e. The Factor column reports tonnes of carbon (t C) per the LEARN convention; Removals and Emissions report tonnes of CO2-equivalent (t CO2e) per year.", False),
         ("", False),
+        ("Roadless areas", True),
+        ("Roadless extent is from the USFS \"Roadless Areas: 2001, Idaho, and Colorado Rules Combined\" layer (FSGeodata Clearinghouse), intersected against each PAD-US unit. PAD-US' own IRA designation is incomplete, so the separate USFS layer is used as authoritative. In this dataset all roadless area falls on GAP 3 land, so Protected Status GAP 2.5 = roadless-over-GAP-3.", False),
+        ("", False),
         ("Known model behaviors that look surprising", True),
         ("- ~42 % of Insect/Disease emission factors in the LEARN lookup are negative by design.", False),
         ("- 5–21 % of Harvest emission factors are also negative by design, concentrated in low-intensity classes; \"Harvest: High\" is never negative.", False),
@@ -109,10 +116,12 @@ def write_readme(ws):
         ("Sheets in this workbook", True),
         ("National Totals — 56 rows (2 modes x 4 periods x 7 LEARN types).", False),
         ("By Agency — USFS vs BLM rollup.", False),
-        ("By GAP Protection — GAP status 1–4.", False),
+        ("By GAP Protection — raw GAP status 1–4 (roadless NOT applied).", False),
+        ("By Protected Status — GAP status with roadless overlain as GAP 2.5 (roadless areas on GAP 3/4 land are recoded 2.5, between GAP 2 and GAP 3). This is the protected-status view for compiling emissions with roadless distinguished.", False),
+        ("By GAP x Roadless — fully disaggregated cross-tab of GAP status and roadless (Y/N); the Protected Status view is derived from this.", False),
         ("By FS Region — Forest Service Region 1–10 (BLM lumped as \"BLM\").", False),
         ("By State — state rollup.", False),
-        ("By Unit — per-PAD-US-unit (605 units, ~34k rows).", False),
+        ("By Unit — per-PAD-US-unit polygon, split by roadless (903 polygons).", False),
     ]
     ws.column_dimensions["A"].width = 150
     for i, (text, is_header) in enumerate(rows, start=1):

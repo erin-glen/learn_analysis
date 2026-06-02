@@ -18,14 +18,14 @@ from pathlib import Path
 import pandas as pd
 
 BASE_DIR = Path(r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\national_runs")
-AOI_DBF = Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_cleaned.dbf")
+AOI_DBF = Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.dbf")
 
 RECAT_MODES = ["recat_true", "recat_false"]
 INVENTORY_PERIODS = ["2013_2016", "2016_2019", "2019_2021", "2021_2023"]
-RUN_LABEL = "PADUS_FS_BLM_UNIT"
+RUN_LABEL = "PADUS_FS_BLM_ROADLESS"
 RUN_SUFFIX = "_BatchProcessing"
 CSV_NAME = "combined_results.csv"
-FINAL_OUTPUT = BASE_DIR / "combined_results_PADUS_UNIT_ALL.csv"
+FINAL_OUTPUT = BASE_DIR / "combined_results_PADUS_ROADLESS_ALL.csv"
 
 
 def _parse_folder_date(folder_name: str):
@@ -64,7 +64,7 @@ def load_aoi_attrs():
         print(f"WARN: AOI shapefile not found at {shp}; skipping AOI attribute join.")
         return None
     gdf = pyogrio.read_dataframe(shp, read_geometry=False)
-    keep = [c for c in ["unit_id", "mang_name", "unit_nm", "gap_sts", "state_nm", "acres_nat"] if c in gdf.columns]
+    keep = [c for c in ["unit_id", "mang_name", "unit_nm", "gap_sts", "state_nm", "acres_nat", "roadless"] if c in gdf.columns]
     return gdf[keep].copy()
 
 

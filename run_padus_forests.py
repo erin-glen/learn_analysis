@@ -20,9 +20,9 @@ from unittest.mock import patch
 
 import forests_analysis
 
-AOI_SHAPEFILE = r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_cleaned.shp"
+AOI_SHAPEFILE = r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.shp"
 ID_FIELD = "unit_id"
-RUN_LABEL = "PADUS_FS_BLM_UNIT"
+RUN_LABEL = "PADUS_FS_BLM_ROADLESS"
 
 OUTPUT_ROOT = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\national_runs"
 OUTPUT_DIRS = {

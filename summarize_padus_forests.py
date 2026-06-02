@@ -115,6 +115,26 @@ STATE_TO_FS_REGION = {
 }
 
 
+def derive_protection(df: pd.DataFrame) -> pd.Series:
+    """LEARN-style protected-status code with roadless overlain on the GAP codes.
+
+    Roadless areas are coded GAP 2.5 (between GAP 2 and GAP 3) where they fall on
+    GAP 3/4 land — i.e. roadless protection makes otherwise-multiple-use land more
+    protected. Roadless over GAP 1/2 keeps its stronger code (roadless never demotes
+    protection); in the current data all roadless is GAP 3, so this is a no-op there.
+    raw gap_sts is preserved in its own column; this is purely a derived view.
+    """
+    gap = df["gap_sts"].astype(str).str.strip()
+    roadless = df.get("roadless", pd.Series("N", index=df.index)).astype(str).str.strip().str.upper()
+    prot = gap.copy()
+    prot[roadless.eq("Y") & gap.isin(["3", "4"])] = "2.5"
+    return prot
+
+
+# Display order for the protection (GAP-2.5) dimension.
+PROTECTION_ORDER = ["1", "2", "2.5", "3", "4", "UNK"]
+
+
 def add_fs_region(df: pd.DataFrame) -> pd.DataFrame:
     """Add fs_region column. USFS units mapped from state; BLM units lumped as 'BLM'."""
     if "mang_name" not in df.columns or "state_nm" not in df.columns:
@@ -153,6 +173,11 @@ def load_frf(compiled_csv: Path) -> pd.DataFrame:
     if df.empty:
         raise SystemExit(f"No '{FRF_CATEGORY}' rows in {compiled_csv}")
     df = df.rename(columns={AREA_COL: "area_ha", FLUX_COL: "flux_tCO2e_yr"})
+    if "roadless" not in df.columns:
+        print("WARN: no 'roadless' column in compiled data; defaulting all rows to 'N'.")
+        df["roadless"] = "N"
+    df["roadless"] = df["roadless"].fillna("N").astype(str).str.strip().str.upper()
+    df["protection"] = derive_protection(df)
     df = add_fs_region(df)
     return df
 
@@ -284,7 +309,7 @@ def main() -> None:
 
     # 2. Per-unit (with attribute columns for downstream filtering)
     unit_cols = ["Geography_ID", "mang_name", "unit_nm", "state_nm",
-                 "gap_sts", "acres_nat", "fs_region"]
+                 "gap_sts", "roadless", "protection", "acres_nat", "fs_region"]
     unit_cols = [c for c in unit_cols if c in frf.columns]
     write_pair("frf_by_unit",
                _summarize(frf, KEY_COLS + unit_cols + [TYPE_COL]),
@@ -292,13 +317,34 @@ def main() -> None:
                out_dir=args.out)
     write_learn("frf_learn_by_unit", _learn_long(frf, unit_cols), args.out)
 
-    # 3. By GAP protection status
+    # 3. By GAP protection status (raw gap_sts, roadless not applied)
     if "gap_sts" in frf.columns:
         write_pair("frf_by_protection",
                    _summarize(frf, KEY_COLS + ["gap_sts", TYPE_COL]),
                    dim_cols=["gap_sts"],
                    out_dir=args.out)
         write_learn("frf_learn_by_protection", _learn_long(frf, ["gap_sts"]), args.out)
+
+    # 3a. Protection with roadless overlain on the GAP codes (GAP-2.5 view) —
+    #     the deliverable for Rich: a single protected-status column for compiling
+    #     emissions by protection class with roadless distinguished.
+    if "protection" in frf.columns:
+        write_pair("frf_by_protection_gap25",
+                   _summarize(frf, KEY_COLS + ["protection", TYPE_COL]),
+                   dim_cols=["protection"],
+                   out_dir=args.out)
+        write_learn("frf_learn_by_protection_gap25",
+                    _learn_long(frf, ["protection"]), args.out)
+
+    # 3b. Fully disaggregated gap_sts x roadless cross-tab (source of truth; the
+    #     GAP-2.5 view above is derived from this and can always be re-aggregated).
+    if "roadless" in frf.columns and "gap_sts" in frf.columns:
+        write_pair("frf_by_protection_roadless",
+                   _summarize(frf, KEY_COLS + ["gap_sts", "roadless", TYPE_COL]),
+                   dim_cols=["gap_sts", "roadless"],
+                   out_dir=args.out)
+        write_learn("frf_learn_by_protection_roadless",
+                    _learn_long(frf, ["gap_sts", "roadless"]), args.out)
 
     # 4. By agency (USFS vs BLM)
     if "mang_name" in frf.columns:
