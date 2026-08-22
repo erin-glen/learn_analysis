@@ -2,7 +2,8 @@
 Bundle the LEARN-format FRF summaries into a single, formatted Excel workbook for
 non-technical recipients.
 
-Reads the `frf_learn_*.csv` files from summaries_FRF/ and writes
+Reads the `frf_learn_*.csv` files from the summary folder for the selected
+LEARN_AOI preset (see compile_padus_results.AOI_PRESETS) and writes
 `FRF_LEARN_summaries.xlsx` alongside them.
 
 Layout:
@@ -33,7 +34,9 @@ from openpyxl.utils import get_column_letter
 import compile_padus_results as compile_mod
 
 BASE = compile_mod.BASE_DIR
-SUM = BASE / "summaries_FRF"
+# Must follow the AOI preset, NOT a hardcoded folder: with LEARN_AOI=nwfp this
+# script otherwise reads and rewrites the roadless deliverable's summaries_FRF/.
+SUM = compile_mod.SUMMARY_DIR
 OUT = SUM / "FRF_LEARN_summaries.xlsx"
 
 HEADER_FILL = PatternFill("solid", fgColor="1F3A5F")

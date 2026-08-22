@@ -20,9 +20,15 @@ from unittest.mock import patch
 
 import forests_analysis
 
-AOI_SHAPEFILE = r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.shp"
+# AOI presets, keyed the same way as compile_padus_results.AOI_PRESETS. Pick one
+# with --aoi (default: the LEARN_AOI env var, else "roadless").
+AOI_PRESETS = {
+    "roadless": (r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.shp",
+                 "PADUS_FS_BLM_ROADLESS"),
+    "nwfp":     (r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp.shp",
+                 "PADUS_FS_BLM_NWFP"),
+}
 ID_FIELD = "unit_id"
-RUN_LABEL = "PADUS_FS_BLM_ROADLESS"
 
 OUTPUT_ROOT = r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\national_runs"
 OUTPUT_DIRS = {
@@ -42,7 +48,7 @@ def _period_key(y1, y2):
     return f"{y1}_{y2}"
 
 
-def run_one(mode_label, year1, year2, test=False):
+def run_one(mode_label, year1, year2, aoi_shp, run_label, test=False):
     """mode_label is 'recategorize' or 'normal'."""
     analysis_mode = "recategorize" if mode_label == "recategorize" else ("test" if test else None)
     # Note: forests_analysis treats 'test' and 'recategorize' as mutually exclusive.
@@ -55,14 +61,14 @@ def run_one(mode_label, year1, year2, test=False):
     output_base_dir = OUTPUT_DIRS[mode_label]
     os.makedirs(output_base_dir, exist_ok=True)
 
-    print(f"\n=== {mode_label.upper()} | {year1}-{year2} | out={output_base_dir} ===")
+    print(f"\n=== {mode_label.upper()} | {year1}-{year2} | {run_label} | out={output_base_dir} ===")
     # forests_analysis.main() still prompts for year1/year2 via input(); mock those.
     with patch("builtins.input", side_effect=[str(year1), str(year2)]):
         forests_analysis.main(
             mode=analysis_mode,
-            aoi_shapefile=AOI_SHAPEFILE,
+            aoi_shapefile=aoi_shp,
             id_field=ID_FIELD,
-            run_label=RUN_LABEL,
+            run_label=run_label,
             output_base_dir=output_base_dir,
         )
 
@@ -76,6 +82,10 @@ def parse_args():
                         "Default: all four.")
     p.add_argument("--test", action="store_true",
                    help="Dry-run: first 10 features only (mode=normal only).")
+    p.add_argument("--aoi", choices=sorted(AOI_PRESETS),
+                   default=os.environ.get("LEARN_AOI", "roadless"),
+                   help="Which AOI preset to run (default: $LEARN_AOI, else 'roadless'). "
+                        "Must match LEARN_AOI when compiling/summarizing.")
     return p.parse_args()
 
 
@@ -92,9 +102,16 @@ def main():
 
     modes = ["recategorize", "normal"] if args.mode == "both" else [args.mode]
 
+    aoi_shp, run_label = AOI_PRESETS[args.aoi]
+    if not os.path.exists(aoi_shp):
+        sys.exit(f"AOI shapefile not found: {aoi_shp}")
+    print(f"AOI preset '{args.aoi}': {aoi_shp}")
+    print(f"Run label: {run_label}")
+    print(f"Modes: {modes}  Periods: {[_period_key(a, b) for a, b in periods]}")
+
     for mode_label in modes:
         for y1, y2 in periods:
-            run_one(mode_label, y1, y2, test=args.test)
+            run_one(mode_label, y1, y2, aoi_shp, run_label, test=args.test)
 
 
 if __name__ == "__main__":

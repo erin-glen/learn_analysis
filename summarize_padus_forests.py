@@ -48,7 +48,7 @@ import compile_padus_results as compile_mod
 
 BASE_DIR = compile_mod.BASE_DIR
 COMPILED_CSV = compile_mod.FINAL_OUTPUT
-DEFAULT_OUTPUT_DIR = BASE_DIR / "summaries_FRF"
+DEFAULT_OUTPUT_DIR = compile_mod.SUMMARY_DIR
 
 FRF_CATEGORY = "Forest Remaining Forest"
 KEY_COLS = ["recat_mode", "inventory_period"]

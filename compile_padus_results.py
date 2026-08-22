@@ -12,20 +12,46 @@ Output:
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
 BASE_DIR = Path(r"C:\GIS\Data\LEARN\Disturbances\NLCD_harvest_severity\national_runs")
-AOI_DBF = Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.dbf")
+
+# Each deliverable has its own AOI, run label, compiled CSV and summary folder, so
+# runs never overwrite each other. Select with the LEARN_AOI environment variable
+# (run_padus_forests.py takes a matching --aoi flag):
+#     set LEARN_AOI=nwfp        (Windows)   /   export LEARN_AOI=nwfp   (bash)
+AOI_PRESETS = {
+    "roadless": {
+        "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.shp"),
+        "run_label":    "PADUS_FS_BLM_ROADLESS",
+        "combined_csv": "combined_results_PADUS_ROADLESS_ALL.csv",
+        "summary_dir":  "summaries_FRF",
+    },
+    "nwfp": {
+        "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp.shp"),
+        "run_label":    "PADUS_FS_BLM_NWFP",
+        "combined_csv": "combined_results_PADUS_NWFP_ALL.csv",
+        "summary_dir":  "summaries_FRF_NWFP",
+    },
+}
+AOI_PRESET = os.environ.get("LEARN_AOI", "roadless")
+if AOI_PRESET not in AOI_PRESETS:
+    raise SystemExit(f"LEARN_AOI={AOI_PRESET!r} is not one of {sorted(AOI_PRESETS)}")
+_P = AOI_PRESETS[AOI_PRESET]
+
+AOI_DBF = _P["aoi_shp"].with_suffix(".dbf")
 
 RECAT_MODES = ["recat_true", "recat_false"]
 INVENTORY_PERIODS = ["2013_2016", "2016_2019", "2019_2021", "2021_2023"]
-RUN_LABEL = "PADUS_FS_BLM_ROADLESS"
+RUN_LABEL = _P["run_label"]
 RUN_SUFFIX = "_BatchProcessing"
 CSV_NAME = "combined_results.csv"
-FINAL_OUTPUT = BASE_DIR / "combined_results_PADUS_ROADLESS_ALL.csv"
+FINAL_OUTPUT = BASE_DIR / _P["combined_csv"]
+SUMMARY_DIR = BASE_DIR / _P["summary_dir"]
 
 
 def _parse_folder_date(folder_name: str):
