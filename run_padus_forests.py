@@ -27,6 +27,10 @@ AOI_PRESETS = {
                  "PADUS_FS_BLM_ROADLESS"),
     "nwfp":     (r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp.shp",
                  "PADUS_FS_BLM_NWFP"),
+    "gap":      (r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_gap_roadless.shp",
+                 "PADUS_FS_BLM_GAP"),
+    "nwfp_gap": (r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp_gap.shp",
+                 "PADUS_FS_BLM_NWFP_GAP"),
 }
 ID_FIELD = "unit_id"
 

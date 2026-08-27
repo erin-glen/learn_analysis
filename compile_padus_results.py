@@ -37,6 +37,23 @@ AOI_PRESETS = {
         "combined_csv": "combined_results_PADUS_NWFP_ALL.csv",
         "summary_dir":  "summaries_FRF_NWFP",
     },
+    # GAP-corrected AOIs. The "roadless" and "nwfp" AOIs above were built from
+    # PADUS4_1Fee only, which is 100% GAP 3 for USFS+BLM CONUS, so they carry no
+    # protection signal at all -- all designated wilderness reads as "not protected".
+    # These rebuild it from PADUS4_1Designation (see prepare_padus_gap_aoi.py) and
+    # supersede the two above for anything reporting protection status.
+    "gap": {
+        "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_gap_roadless.shp"),
+        "run_label":    "PADUS_FS_BLM_GAP",
+        "combined_csv": "combined_results_PADUS_GAP_ALL.csv",
+        "summary_dir":  "summaries_FRF_GAP",
+    },
+    "nwfp_gap": {
+        "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp_gap.shp"),
+        "run_label":    "PADUS_FS_BLM_NWFP_GAP",
+        "combined_csv": "combined_results_PADUS_NWFP_GAP_ALL.csv",
+        "summary_dir":  "summaries_FRF_NWFP_GAP",
+    },
 }
 AOI_PRESET = os.environ.get("LEARN_AOI", "roadless")
 if AOI_PRESET not in AOI_PRESETS:
