@@ -77,7 +77,7 @@ echo "[$(stamp)] === NWFP PIPELINE START (LEARN_AOI=$LEARN_AOI) ==="
 
 # ---- preflight: arcpy license must be available before any long batch ----
 echo "[$(stamp)] >>> preflight: arcpy license + AOI"
-if ! "$ARCPY" preflight_nwfp.py; then
+if ! "$ARCPY" preflight_aoi.py nwfp; then
   echo "[$(stamp)] === ABORTING: preflight failed (see above) ==="
   exit 1
 fi
