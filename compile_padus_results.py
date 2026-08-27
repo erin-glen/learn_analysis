@@ -48,6 +48,15 @@ AOI_PRESETS = {
         "combined_csv": "combined_results_PADUS_GAP_ALL.csv",
         "summary_dir":  "summaries_FRF_GAP",
     },
+    # Points at the sliver-REPAIRED national CSV (see repair_gap_slivers.py). Use this
+    # preset for anything reporting national protection status; the raw "gap" preset's
+    # summaries contain the 228 contaminated polygons.
+    "gap_repaired": {
+        "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_gap_roadless.shp"),
+        "run_label":    "PADUS_FS_BLM_GAP",
+        "combined_csv": "combined_results_PADUS_GAP_REPAIRED_ALL.csv",
+        "summary_dir":  "summaries_FRF_GAP_REPAIRED",
+    },
     "nwfp_gap": {
         "aoi_shp":      Path(r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\padus_fs_blm_nwfp_gap.shp"),
         "run_label":    "PADUS_FS_BLM_NWFP_GAP",
