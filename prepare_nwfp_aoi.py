@@ -28,24 +28,48 @@ Run with a python that has geopandas (the anaconda env, not arcgispro-py3):
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 from shapely import make_valid
+from shapely.geometry import MultiPolygon
 from shapely.ops import unary_union
 
 from prepare_padus_aoi import _polygons_only
 
 # ---------- configuration ----------
 NWFP_SHP = Path(r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI\dissolved_nfwp.shp")
-PADUS_SHP = Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI\padus_fs_blm_conus_roadless.shp")
 OUTPUT_DIR = Path(r"C:\Users\Erin.Glen\GIS_Data\NWFP_AOI")
-OUTPUT_SHP = OUTPUT_DIR / "padus_fs_blm_nwfp.shp"
-QA_CSV = OUTPUT_DIR / "padus_fs_blm_nwfp_qa.csv"
+FEDERAL_AOI_DIR = Path(r"C:\Users\Erin.Glen\GIS_Data\Federal_Forests_AOI")
+
+# Which national AOI to clip. "gap" is the corrected one (protection status rebuilt
+# from PADUS4_1Designation); "roadless" is the original, whose gap_sts is 100% GAP 3
+# and therefore carries no protection signal. Select with --source.
+SOURCES = {
+    "roadless": (FEDERAL_AOI_DIR / "padus_fs_blm_conus_roadless.shp", "padus_fs_blm_nwfp"),
+    "gap":      (FEDERAL_AOI_DIR / "padus_fs_blm_conus_gap_roadless.shp", "padus_fs_blm_nwfp_gap"),
+}
+DEFAULT_SOURCE = "gap"
+
+PADUS_SHP = SOURCES[DEFAULT_SOURCE][0]
+OUTPUT_SHP = OUTPUT_DIR / (SOURCES[DEFAULT_SOURCE][1] + ".shp")
+QA_CSV = OUTPUT_DIR / (SOURCES[DEFAULT_SOURCE][1] + "_qa.csv")
 
 ACRES_PER_M2 = 0.000247105
 SLIVER_ACRES_THRESHOLD = 0.25  # ~0.1 ha; matches prepare_padus_aoi
+
+# Minimum area for an individual PART of a multipart polygon, in m2. One 30 m pixel
+# is 900 m2, so a smaller part cannot contain a pixel centre and contributes nothing
+# to the analysis -- but it does contribute fragmentation, and that is what broke the
+# national GAP run: intersecting wilderness with roadless boundaries produced polygons
+# like Gunnison NF GAP 1 roadless (56 ha spread over 1,701 parts averaging 0.03 ha,
+# filling 0.00% of its bounding box). On geometry that fragmented,
+# arcpy.management.Clip(..., "ClippingGeometry") stops honouring the polygon and falls
+# back to the bounding box, so the analysis measures the whole parent forest. Dropping
+# sub-pixel parts costs 0.0022% of NWFP area and removes 64% of the parts.
+MIN_PART_M2 = 900.0
 
 ATTR_COLS = ["mang_name", "unit_nm", "gap_sts", "state_nm", "roadless", "unit_id"]
 
@@ -65,6 +89,17 @@ def load_nwfp(target_crs) -> gpd.GeoDataFrame:
     return parts, total_ac
 
 
+def _drop_micro_parts(geom):
+    """Drop parts below MIN_PART_M2 so the geometry stays rasterisable. See MIN_PART_M2."""
+    if geom is None or geom.is_empty:
+        return geom
+    parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+    keep = [p for p in parts if p.area >= MIN_PART_M2]
+    if not keep:
+        keep = [max(parts, key=lambda p: p.area)]  # never empty a polygon entirely
+    return keep[0] if len(keep) == 1 else MultiPolygon(keep)
+
+
 def clip_to_nwfp(aoi: gpd.GeoDataFrame, nwfp: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Intersect each AOI polygon with the NWFP boundary, keeping its attributes."""
     print("[3/4] clipping AOI polygons to the NWFP boundary...")
@@ -75,7 +110,7 @@ def clip_to_nwfp(aoi: gpd.GeoDataFrame, nwfp: gpd.GeoDataFrame) -> gpd.GeoDataFr
         hits = list(sindex.query(g, predicate="intersects"))
         if hits:
             local = make_valid(unary_union(nwfp.geometry.iloc[hits].values))
-            clipped = _polygons_only(make_valid(g.intersection(local)))
+            clipped = _drop_micro_parts(_polygons_only(make_valid(g.intersection(local))))
             if not clipped.is_empty:
                 acres = clipped.area * ACRES_PER_M2
                 if acres >= SLIVER_ACRES_THRESHOLD:
@@ -133,6 +168,15 @@ def export(out: gpd.GeoDataFrame, nwfp_total_ac: float) -> None:
 
 
 def main() -> None:
+    global PADUS_SHP, OUTPUT_SHP, QA_CSV
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--source", choices=sorted(SOURCES), default=DEFAULT_SOURCE,
+                    help="Which national AOI to clip (default: %(default)s).")
+    args = ap.parse_args()
+    src, stem = SOURCES[args.source]
+    PADUS_SHP, OUTPUT_SHP, QA_CSV = src, OUTPUT_DIR / (stem + ".shp"), OUTPUT_DIR / (stem + "_qa.csv")
+    print(f"[0/4] source AOI preset '{args.source}' -> {stem}.shp")
+
     print(f"[1/4] loading {PADUS_SHP.name}...")
     aoi = gpd.read_file(PADUS_SHP)
     print(f"      {len(aoi):,} polygons in {aoi.crs.name}")
